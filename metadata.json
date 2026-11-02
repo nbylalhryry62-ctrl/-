@@ -1,0 +1,8 @@
+{
+  "name": "Aden Medical Test",
+  "description": "بوابة اختبار القبول لكلية الطب والعلوم الصحية بجامعة عدن - نماذج امتحانات، بنك أسئلة، ومفردات المقررات",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

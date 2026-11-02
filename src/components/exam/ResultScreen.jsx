@@ -1,0 +1,14 @@
+import { CheckCircle2, Trophy, XCircle } from 'lucide-react';
+import { PASSING_PERCENTAGE, SUBJECTS } from '../../data/constants';
+
+export default function ResultScreen({ result, params = {}, onBack, onRetry, onHistory }) {
+  const score = Number(result?.score ?? params.score ?? 0);
+  const total = Number(result?.total ?? params.total ?? 0);
+  const percentage = Number(result?.percentage ?? (total ? Math.round(score / total * 100) : 0));
+  const subjectId = result?.subject || params.subject || 'biology';
+  const level = result?.level || params.level || '1';
+  const subject = SUBJECTS[subjectId] || SUBJECTS.biology;
+  const passed = percentage >= PASSING_PERCENTAGE;
+  const details = result?.answers || [];
+  return <main className="mx-auto w-full max-w-3xl px-4 py-8"><section className="overflow-hidden rounded-3xl border bg-white shadow-lg"><header className={`p-8 text-center text-white ${passed ? 'bg-gradient-to-l from-emerald-600 to-teal-500' : 'bg-gradient-to-l from-rose-600 to-pink-500'}`}><div className="mx-auto grid h-16 w-16 place-items-center rounded-full bg-white/20">{passed ? <Trophy className="h-9 w-9" /> : <XCircle className="h-9 w-9" />}</div><h1 className="mt-3 text-2xl font-extrabold">{passed ? 'مبروك، اجتزت الاختبار' : 'انتهى الاختبار'}</h1><p className="mt-1">{subject.name} · {percentage}%</p></header><div className="p-5 sm:p-8"><div className="grid grid-cols-3 gap-3 text-center"><div className="rounded-xl bg-slate-50 p-4"><b className="block text-2xl">{score}</b><span className="text-xs text-slate-500">إجابات صحيحة</span></div><div className="rounded-xl bg-slate-50 p-4"><b className="block text-2xl">{Math.max(0, total - score)}</b><span className="text-xs text-slate-500">إجابات غير صحيحة</span></div><div className="rounded-xl bg-slate-50 p-4"><b className="block text-2xl">{total}</b><span className="text-xs text-slate-500">إجمالي الأسئلة</span></div></div>{details.length > 0 && <section className="mt-6"><h2 className="mb-3 font-extrabold">مراجعة الإجابات</h2><div className="max-h-72 space-y-2 overflow-y-auto">{details.map((item, index) => <div key={item.questionId || index} className={`flex gap-2 rounded-lg p-3 text-sm ${item.isCorrect ? 'bg-emerald-50 text-emerald-900' : 'bg-rose-50 text-rose-900'}`}><span>{item.isCorrect ? <CheckCircle2 className="h-4 w-4" /> : <XCircle className="h-4 w-4" />}</span><span>س{index + 1}: {item.question}</span></div>)}</div></section>}<div className="mt-6 flex flex-wrap gap-2"><button onClick={onBack} className="flex-1 rounded-xl border px-4 py-3 font-semibold">لوحة المواد</button><button onClick={() => onRetry(subjectId, level)} className="flex-1 rounded-xl bg-indigo-600 px-4 py-3 font-bold text-white">إعادة الاختبار</button><button onClick={onHistory} className="flex-1 rounded-xl bg-indigo-50 px-4 py-3 font-bold text-indigo-700">سجل النتائج</button></div></div></section></main>;
+}

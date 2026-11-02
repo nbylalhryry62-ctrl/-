@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Aden Medical Test</string>
+    <string name="app_title_ar">اختبار القبول الطبي</string>
+    <string name="university_name">جامعة عدن</string>
+    <string name="faculty_name">كلية الطب والعلوم الصحية</string>
+    <string name="nav_subjects">المواد</string>
+    <string name="nav_syllabus">المنهج</string>
+    <string name="nav_results">النتائج</string>
+    <string name="nav_profile">الملف الشخصي</string>
+    <string name="nav_admin">الإدارة</string>
+    <string name="biology_name">الأحياء</string>
+    <string name="chemistry_name">الكيمياء</string>
+    <string name="english_name">اللغة الإنجليزية</string>
+    <string name="passing_rate_label">النجاح من 50%</string>
+    <string name="start_exam">بدء الاختبار</string>
+    <string name="random_exam">اختبار عشوائي</string>
+    <string name="all_questions">البنك الكامل</string>
+    <string name="syllabus_title">مفردات المنهج المقررة</string>
+    <string name="results_history_title">سجل النتائج</string>
+    <string name="time_remaining">الوقت المتبقي</string>
+    <string name="submit_exam">تسليم الاختبار</string>
+    <string name="prev_question">السابق</string>
+    <string name="next_question">التالي</string>
+    <string name="confirm_submit">تأكيد التسليم</string>
+    <string name="retry_exam">إعادة الاختبار</string>
+    <string name="back_to_subjects">لوحة المواد</string>
+    <string name="guest_student">طالبنا العزيز</string>
+</resources>
