@@ -1,7 +1,7 @@
 package com.example.adenmedicaltest.ui.viewmodel
 
-import android.app.Application
-import androidx.lifecycle.AndroidViewModel
+import android.util.Log
+import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.adenmedicaltest.data.model.ExamAnswer
 import com.example.adenmedicaltest.data.model.ExamResult
@@ -20,8 +20,16 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+
+sealed interface UiState<out T> {
+    data object Loading : UiState<Nothing>
+    data class Success<T>(val data: T) : UiState<T>
+    data class Error(val message: String) : UiState<Nothing>
+}
 
 data class ActiveExamState(
     val subject: Subject,
@@ -50,18 +58,69 @@ data class ActiveExamState(
         }
 }
 
-class MainViewModel(application: Application) : AndroidViewModel(application) {
-
-    private val examRepository = ExamRepository(application)
-    private val syllabusRepository = SyllabusRepository(application)
-    private val authRepository = AuthRepository()
+class MainViewModel(
+    private val examRepository: ExamRepository,
+    private val syllabusRepository: SyllabusRepository,
+    private val authRepository: AuthRepository,
+    private val currentUserId: String,
+    private val currentUserEmail: String,
+    private val currentUserDisplayName: String?
+) : ViewModel() {
 
     val subjects: List<Subject> = examRepository.subjects
 
-    val currentUser: StateFlow<UserProfile?> = authRepository.currentUser
+    val currentUser: StateFlow<UserProfile?> = authRepository.observeUserProfile(currentUserId)
+        .catch { error ->
+            Log.w(TAG, "Error observing user profile", error)
+            emit(
+                UserProfile(
+                    id = currentUserId,
+                    userId = currentUserId,
+                    email = currentUserEmail,
+                    username = currentUserEmail.substringBefore("@").ifBlank { "student" },
+                    fullName = currentUserDisplayName ?: "طالب كلية الطب",
+                    role = "student"
+                )
+            )
+        }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS),
+            initialValue = UserProfile(
+                id = currentUserId,
+                userId = currentUserId,
+                email = currentUserEmail,
+                username = currentUserEmail.substringBefore("@").ifBlank { "student" },
+                fullName = currentUserDisplayName ?: "طالب كلية الطب",
+                role = "student"
+            )
+        )
 
-    val results: StateFlow<List<ExamResult>> = examRepository.getAllResults()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    // Two-tier Flow error handling for Firestore snapshot stream
+    val resultsState: StateFlow<UiState<List<ExamResult>>> = examRepository.observeResults(currentUserId)
+        .map<List<ExamResult>, UiState<List<ExamResult>>> { UiState.Success(it) }
+        .catch { error ->
+            Log.w(TAG, "Error observing exam results", error)
+            emit(UiState.Error(error.message ?: "تعذر تحميل سجل النتائج"))
+        }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS),
+            initialValue = UiState.Loading
+        )
+
+    val results: StateFlow<List<ExamResult>> = resultsState
+        .map { state ->
+            when (state) {
+                is UiState.Success -> state.data
+                else -> emptyList()
+            }
+        }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS),
+            initialValue = emptyList()
+        )
 
     private val _currentScreen = MutableStateFlow<Screen>(Screen.Dashboard)
     val currentScreen: StateFlow<Screen> = _currentScreen.asStateFlow()
@@ -81,17 +140,35 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _syllabusMap = MutableStateFlow<Map<String, SyllabusData>>(emptyMap())
     val syllabusMap: StateFlow<Map<String, SyllabusData>> = _syllabusMap.asStateFlow()
 
+    private val _errorBanner = MutableStateFlow<String?>(null)
+    val errorBanner: StateFlow<String?> = _errorBanner.asStateFlow()
+
     private var timerJob: Job? = null
     private var examStartTime: Long = 0L
 
     init {
         loadSyllabus()
+        ensureProfileInitialized()
+    }
+
+    private fun ensureProfileInitialized() {
+        viewModelScope.launch {
+            authRepository.ensureUserProfile(
+                userId = currentUserId,
+                email = currentUserEmail,
+                displayName = currentUserDisplayName
+            )
+        }
     }
 
     private fun loadSyllabus() {
         viewModelScope.launch {
             _syllabusMap.value = syllabusRepository.getAllSyllabus()
         }
+    }
+
+    fun clearErrorBanner() {
+        _errorBanner.value = null
     }
 
     fun navigateTo(screen: Screen) {
@@ -180,19 +257,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun goToQuestion(index: Int) {
-        val current = _activeExam.value ?: return
-        if (index in current.questions.indices) {
-            _activeExam.value = current.copy(currentIndex = index)
-        }
-    }
-
     fun submitExam() {
         val current = _activeExam.value ?: return
         if (current.isSubmitted) return
         timerJob?.cancel()
 
-        val timeTakenSeconds = ((System.currentTimeMillis() - examStartTime) / 1000).toInt().coerceAtMost(600)
+        val timeTakenSeconds = ((System.currentTimeMillis() - examStartTime) / 1000).toInt().coerceIn(0, 600)
 
         val answersDetails = current.questions.map { q ->
             val userAns = current.answers[q.id]
@@ -212,6 +282,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val passed = percentage >= 50
 
         val result = ExamResult(
+            userId = currentUserId,
             subjectId = current.subject.id,
             subjectName = current.subject.name,
             level = current.level,
@@ -225,12 +296,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
         _activeExam.value = current.copy(isSubmitted = true)
         _lastResult.value = result
+        _currentScreen.value = Screen.Result(result)
 
         viewModelScope.launch {
-            val savedId = examRepository.saveResult(result)
-            val resultWithId = result.copy(id = savedId)
-            _lastResult.value = resultWithId
-            _currentScreen.value = Screen.Result(resultWithId)
+            val saved = examRepository.saveResult(result)
+            saved.onSuccess { docId ->
+                val updated = result.copy(id = docId)
+                _lastResult.value = updated
+            }.onFailure { err ->
+                _errorBanner.value = err.localizedMessage ?: "تعذر حفظ النتيجة في قاعدة البيانات السحابية"
+            }
         }
     }
 
@@ -239,23 +314,24 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         startExam(result.subjectId, result.level)
     }
 
-    fun deleteResult(id: Long) {
+    fun deleteResult(id: String) {
         viewModelScope.launch {
-            examRepository.deleteResult(id)
+            examRepository.deleteResult(id).onFailure { err ->
+                _errorBanner.value = err.localizedMessage ?: "تعذر حذف النتيجة"
+            }
         }
     }
 
-    fun login(email: String) {
-        authRepository.login(email)
-        _currentScreen.value = Screen.Dashboard
+    fun updateProfileFullName(fullName: String) {
+        viewModelScope.launch {
+            authRepository.updateFullName(fullName).onFailure { err ->
+                _errorBanner.value = err.localizedMessage ?: "تعذر تحديث الاسم الكامل"
+            }
+        }
     }
 
-    fun logout() {
-        authRepository.logout()
-        _currentScreen.value = Screen.Dashboard
-    }
-
-    fun toggleAdminRole() {
-        authRepository.toggleRole()
+    private companion object {
+        const val TAG = "MainViewModel"
+        const val STOP_TIMEOUT_MILLIS = 5000L
     }
 }

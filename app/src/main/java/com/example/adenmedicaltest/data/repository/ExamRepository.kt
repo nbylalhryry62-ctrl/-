@@ -1,17 +1,30 @@
 package com.example.adenmedicaltest.data.repository
 
 import android.content.Context
-import com.example.adenmedicaltest.data.local.AppDatabase
-import com.example.adenmedicaltest.data.local.ExamResultEntity
+import com.example.adenmedicaltest.R
 import com.example.adenmedicaltest.data.model.ExamAnswer
 import com.example.adenmedicaltest.data.model.ExamResult
 import com.example.adenmedicaltest.data.model.Option
 import com.example.adenmedicaltest.data.model.Question
 import com.example.adenmedicaltest.data.model.Subject
 import com.example.adenmedicaltest.data.model.SubjectLevel
+import com.example.adenmedicaltest.data.remote.OperationType
+import com.example.adenmedicaltest.data.remote.handleFirestoreError
+import com.google.firebase.Firebase
+import com.google.firebase.auth.auth
+import com.google.firebase.firestore.DocumentSnapshot
+import com.google.firebase.firestore.FieldValue
+import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.Query
+import com.google.firebase.firestore.snapshots
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.emitAll
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
@@ -19,10 +32,20 @@ import java.io.BufferedReader
 import java.io.InputStreamReader
 import kotlin.math.ceil
 
-class ExamRepository(private val context: Context) {
+class ExamRepository(
+    private val db: FirebaseFirestore,
+    private val appContext: Context? = null
+) {
+    // CRITICAL: Always initialize with R.string.firestore_database_id
+    constructor(context: Context) : this(
+        FirebaseFirestore.getInstance(
+            context.applicationContext.getString(R.string.firestore_database_id)
+        ),
+        context.applicationContext
+    )
 
-    private val db = AppDatabase.getDatabase(context)
-    private val dao = db.examResultDao()
+    private val auth
+        get() = Firebase.auth
 
     private var cachedQuestions: Map<String, List<Question>>? = null
 
@@ -53,6 +76,11 @@ class ExamRepository(private val context: Context) {
         )
     )
 
+    private fun requireUserId(): String {
+        return auth.currentUser?.uid
+            ?: throw IllegalStateException("User must be signed in with Google before accessing Firestore.")
+    }
+
     suspend fun getQuestionsForSubject(subjectId: String): List<Question> = withContext(Dispatchers.IO) {
         if (cachedQuestions == null) {
             loadAllQuestions()
@@ -61,6 +89,7 @@ class ExamRepository(private val context: Context) {
     }
 
     private fun loadAllQuestions() {
+        val context = appContext ?: return
         try {
             val inputStream = context.assets.open("question_bank.json")
             val reader = BufferedReader(InputStreamReader(inputStream))
@@ -141,78 +170,118 @@ class ExamRepository(private val context: Context) {
         pool.shuffled().take(count)
     }
 
-    fun getAllResults(): Flow<List<ExamResult>> {
-        return dao.getAllResults().map { list ->
-            list.map { it.toDomainModel() }
-        }
-    }
-
-    suspend fun saveResult(result: ExamResult): Long = withContext(Dispatchers.IO) {
-        dao.insertResult(result.toEntity())
-    }
-
-    suspend fun deleteResult(id: Long) = withContext(Dispatchers.IO) {
-        dao.deleteResult(id)
-    }
-
-    private fun ExamResult.toEntity(): ExamResultEntity {
-        val answersArray = JSONArray()
-        for (a in answers) {
-            val obj = JSONObject()
-            obj.put("questionId", a.questionId)
-            obj.put("question", a.question)
-            obj.put("userAnswer", a.userAnswer ?: "")
-            obj.put("correctAnswer", a.correctAnswer)
-            obj.put("isCorrect", a.isCorrect)
-            answersArray.put(obj)
-        }
-        return ExamResultEntity(
-            id = id,
-            subjectId = subjectId,
-            subjectName = subjectName,
-            level = level,
-            score = score,
-            total = total,
-            percentage = percentage,
-            passed = passed,
-            timeTakenSeconds = timeTakenSeconds,
-            answersJson = answersArray.toString(),
-            createdAt = createdAt
+    fun observeResults(userId: String? = null): Flow<List<ExamResult>> = flow {
+        val targetUid = userId ?: auth.currentUser?.uid ?: "unauthenticated"
+        val path = "users/$targetUid/results"
+        emitAll(
+            db.collection("users").document(targetUid).collection("results")
+                .snapshots()
+                .map { snapshot ->
+                    snapshot.documents.mapNotNull { doc ->
+                        doc.toExamResult()
+                    }.sortedByDescending { it.createdAt?.seconds ?: 0L }
+                }
+                .catch { error ->
+                    if (error is Exception) {
+                        handleFirestoreError(error, OperationType.LIST, path)
+                    }
+                    throw error
+                }
         )
     }
 
-    private fun ExamResultEntity.toDomainModel(): ExamResult {
-        val answersList = mutableListOf<ExamAnswer>()
-        try {
-            val arr = JSONArray(answersJson)
-            for (i in 0 until arr.length()) {
-                val obj = arr.getJSONObject(i)
-                answersList.add(
-                    ExamAnswer(
-                        questionId = obj.optString("questionId", ""),
-                        question = obj.optString("question", ""),
-                        userAnswer = obj.optString("userAnswer", "").ifEmpty { null },
-                        correctAnswer = obj.optString("correctAnswer", ""),
-                        isCorrect = obj.optBoolean("isCorrect", false),
-                        options = emptyList()
-                    )
-                )
-            }
+    suspend fun getUserResults(userId: String? = null): Result<List<ExamResult>> {
+        val targetUid = userId ?: requireUserId()
+        val path = "users/$targetUid/results"
+        return try {
+            val snapshot = db.collection("users").document(targetUid).collection("results")
+                .get()
+                .await()
+            val list = snapshot.documents.mapNotNull { it.toExamResult() }
+                .sortedByDescending { it.createdAt?.seconds ?: 0L }
+            Result.success(list)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
-            e.printStackTrace()
+            handleFirestoreError(e, OperationType.LIST, path)
+            Result.failure(e)
         }
+    }
+
+    suspend fun getResultById(ownerUserId: String, resultId: String): Result<ExamResult?> {
+        val docRef = db.collection("users").document(ownerUserId).collection("results").document(resultId)
+        return try {
+            val snapshot = docRef.get().await()
+            Result.success(if (snapshot.exists()) snapshot.toExamResult() else null)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.GET, docRef.path)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun saveResult(result: ExamResult): Result<String> {
+        val uid = requireUserId()
+        val resultsRef = db.collection("users").document(uid).collection("results")
+        val payload = mapOf(
+            "userId" to uid,
+            "subjectId" to result.subjectId,
+            "subjectName" to result.subjectName,
+            "level" to result.level,
+            "score" to result.score,
+            "total" to result.total,
+            "percentage" to result.percentage,
+            "passed" to result.passed,
+            "timeTakenSeconds" to result.timeTakenSeconds,
+            "createdAt" to FieldValue.serverTimestamp()
+        )
+        return try {
+            val docRef = resultsRef.add(payload).await()
+            Result.success(docRef.id)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.CREATE, resultsRef.path)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun deleteResult(resultId: String): Result<Unit> {
+        val uid = requireUserId()
+        if (resultId.isBlank()) return Result.failure(IllegalArgumentException("Result ID is blank"))
+        val docRef = db.collection("users").document(uid).collection("results").document(resultId)
+        return try {
+            docRef.delete().await()
+            Result.success(Unit)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.DELETE, docRef.path)
+            Result.failure(e)
+        }
+    }
+
+    private fun DocumentSnapshot.toExamResult(): ExamResult? {
+        if (!exists()) return null
+        val scoreInt = (getLong("score") ?: 0L).toInt()
+        val totalInt = (getLong("total") ?: 0L).toInt()
+        val percentageInt = (getLong("percentage") ?: 0L).toInt()
+        val timeTakenInt = (getLong("timeTakenSeconds") ?: 0L).toInt()
+        val ts = getTimestamp("createdAt", DocumentSnapshot.ServerTimestampBehavior.ESTIMATE)
         return ExamResult(
             id = id,
-            subjectId = subjectId,
-            subjectName = subjectName,
-            level = level,
-            score = score,
-            total = total,
-            percentage = percentage,
-            passed = passed,
-            timeTakenSeconds = timeTakenSeconds,
-            answers = answersList,
-            createdAt = createdAt
+            userId = getString("userId") ?: "",
+            subjectId = getString("subjectId") ?: "biology",
+            subjectName = getString("subjectName") ?: "الأحياء",
+            level = getString("level") ?: "1",
+            score = scoreInt,
+            total = totalInt,
+            percentage = percentageInt,
+            passed = getBoolean("passed") ?: (percentageInt >= 50),
+            timeTakenSeconds = timeTakenInt,
+            answers = emptyList(),
+            createdAt = ts
         )
     }
 }

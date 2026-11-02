@@ -18,8 +18,9 @@
 3. **تقرير النتائج ومراجعة الإجابات**:
    - احتساب الدرجة ونسبة النجاح المعيارية (النجاح من 50%).
    - استعراض فوري ومفصل لكل سؤال، مع توضيح إجابة الطالب مقابل الإجابة الصحيحة المعتمدة.
-4. **سجل النتائج المستمر (Room Database)**:
-   - حفظ كافة المحاولات والنتائج محلياً على الجهاز عبر SQLite / Room Database للعمل بدون إنترنت.
+4. **المصادقة السحابية وسجل النتائج (Firebase Auth & Cloud Firestore)**:
+   - تسجيل الدخول الآمن عبر حساب جوجل باستخدام **Jetpack Credential Manager** و **Firebase Authentication**.
+   - حفظ ومزامنة ملف الطالب وسجل كافة المحاولات والنتائج لحظياً عبر **Cloud Firestore** (`/users/{userId}` و `/users/{userId}/results/{resultId}`) مع قواعد أمان صارمة (`firestore.rules`).
    - إمكانية إعادة أي اختبار سابق بلمسة واحدة.
 5. **مفردات المنهج المعتمدة (Syllabus)**:
    - دليل مفصل للموضوعات الوزارية المقررة للصفوف الثانوية الثلاثة.
@@ -35,28 +36,29 @@ app/
 │   │   ├── question_bank.json           # 1,142 سؤالاً مع الخيارات والمفاتيح الصحيحة
 │   │   └── syllabus_data.json           # المفردات والموضوعات المعتمدة
 │   ├── java/com/example/adenmedicaltest/
-│   │   ├── MainActivity.kt              # نقطة البداية مع تفعيل Edge-to-Edge و RTL
+│   │   ├── MainActivity.kt              # نقطة البداية مع تفعيل Edge-to-Edge و RTL وبوابة المصادقة
 │   │   ├── data/
-│   │   │   ├── model/Models.kt          # نماذج البيانات (Subject, Question, ExamResult, Syllabus)
-│   │   │   ├── local/                   # Room Database, DAO, Entities
+│   │   │   ├── model/Models.kt          # نماذج البيانات (Subject, Question, ExamResult, UserProfile, Syllabus)
+│   │   │   ├── remote/                  # FirestoreErrorHandler ومعالجة أخطاء الشبكة والصلاحيات
 │   │   │   └── repository/              # ExamRepository, SyllabusRepository, AuthRepository
 │   │   ├── ui/
+│   │   │   ├── auth/GoogleAuthHelper.kt # تسجيل الدخول بحساب Google عبر Credential Manager
 │   │   │   ├── theme/                   # Material 3 Theme, Typography, Colors
 │   │   │   ├── navigation/              # Destinations & Routes
-│   │   │   ├── viewmodel/MainViewModel  # إدارة حالة الاختبار، المؤقت، والنتائج
+│   │   │   ├── viewmodel/MainViewModel  # إدارة حالة الاختبار، المؤقت، والنتائج السحابية
 │   │   │   ├── components/AppTopBar     # الشريط العلوي والتنقل
-│   │   │   └── screens/                 # شاشات Compose (Dashboard, Exam, Result, History, Syllabus, Profile, Admin)
+│   │   │   └── screens/                 # شاشات Compose (Auth, Dashboard, Exam, Result, History, Syllabus, Profile, Admin)
 │   └── res/
 │       ├── drawable/                    # أيقونات المتجهات وخلفيات Launcher
 │       ├── mipmap-*/                    # أيقونات التطبيق التكيفية بمختلف الكثافات
-│       └── values/strings.xml           # النصوص والترجمة العربية
+│       └── values/                      # strings.xml و firebase_applet_config.xml
 ```
 
 ## المتطلبات والبناء (Build & Run)
 
-- **Language**: Kotlin 2.0+
-- **UI Framework**: Jetpack Compose (BOM 2024.11.00)
+- **Language**: Kotlin 2.2+
+- **UI Framework**: Jetpack Compose (Material Design 3)
 - **Minimum SDK**: Android 7.0 (API 24)
 - **Target SDK**: Android 15 (API 35/36)
-- **Local Database**: Room 2.6.1
+- **Backend & Cloud**: Firebase Authentication, Cloud Firestore (`firebase-bom`), Jetpack Credential Manager
 - **Gradle**: Kotlin DSL (`build.gradle.kts`, `settings.gradle.kts`, `libs.versions.toml`)

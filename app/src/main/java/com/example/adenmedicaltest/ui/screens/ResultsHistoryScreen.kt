@@ -2,7 +2,6 @@ package com.example.adenmedicaltest.ui.screens
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -30,8 +29,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -40,21 +41,21 @@ import com.example.adenmedicaltest.data.model.ExamResult
 import com.example.adenmedicaltest.ui.theme.EmeraldSuccess
 import com.example.adenmedicaltest.ui.theme.IndigoPrimary
 import com.example.adenmedicaltest.ui.theme.RoseError
+import com.google.firebase.Timestamp
 import java.text.SimpleDateFormat
-import java.util.Date
 import java.util.Locale
 
 @Composable
 fun ResultsHistoryScreen(
     results: List<ExamResult>,
     onRetry: (subjectId: String, level: String) -> Unit,
-    onDelete: (id: Long) -> Unit,
+    onDelete: (id: String) -> Unit,
     onDashboard: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     BackHandler { onDashboard() }
 
-    val dateFormat = SimpleDateFormat("yyyy/MM/dd HH:mm", Locale.getDefault())
+    val dateFormat = remember { SimpleDateFormat("yyyy/MM/dd HH:mm", Locale.getDefault()) }
 
     LazyColumn(
         modifier = modifier
@@ -63,7 +64,6 @@ fun ResultsHistoryScreen(
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        // Header
         item {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -72,13 +72,13 @@ fun ResultsHistoryScreen(
             ) {
                 Column {
                     Text(
-                        text = "سجل النتائج",
+                        text = "سجل النتائج السحابي",
                         fontSize = 20.sp,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
-                        text = "المحاولات المحفوظة محليًا على هذا الجهاز (${results.size})",
+                        text = "المحاولات المحفوظة في حسابك (${results.size})",
                         fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -93,7 +93,6 @@ fun ResultsHistoryScreen(
             }
         }
 
-        // Empty state
         if (results.isEmpty()) {
             item {
                 Card(
@@ -117,13 +116,13 @@ fun ResultsHistoryScreen(
                         )
                         Spacer(modifier = Modifier.height(12.dp))
                         Text(
-                            text = "لا توجد نتائج مسجلة حتى الآن",
+                            text = "لا توجد نتائج مسجلة في حسابك بعد",
                             fontWeight = FontWeight.Bold,
                             fontSize = 16.sp
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = "ابدأ اختبارًا الآن وسيتم تسجيل درجاتك هنا لمتابعة تطورك.",
+                            text = "ابدأ اختبارًا الآن وسيتم حفظ درجاتك تلقائيًا في حسابك على السحابة.",
                             fontSize = 12.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -139,7 +138,10 @@ fun ResultsHistoryScreen(
                 }
             }
         } else {
-            items(results) { item ->
+            items(results, key = { it.id.ifBlank { it.hashCode().toString() } }) { item ->
+                val displayTimestamp = item.createdAt ?: Timestamp.now()
+                val formattedDate = dateFormat.format(displayTimestamp.toDate())
+
                 Card(
                     shape = RoundedCornerShape(16.dp),
                     colors = CardDefaults.cardColors(
@@ -166,7 +168,7 @@ fun ResultsHistoryScreen(
                             )
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
-                                text = "${dateFormat.format(Date(item.createdAt))} · ${item.score}/${item.total} أسئلة",
+                                text = "$formattedDate · ${item.score}/${item.total} أسئلة",
                                 fontSize = 11.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -202,16 +204,18 @@ fun ResultsHistoryScreen(
                                 Text("إعادة", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                             }
 
-                            IconButton(
-                                onClick = { onDelete(item.id) },
-                                modifier = Modifier.size(32.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Delete,
-                                    contentDescription = "حذف",
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                                    modifier = Modifier.size(18.dp)
-                                )
+                            if (item.id.isNotBlank()) {
+                                IconButton(
+                                    onClick = { onDelete(item.id) },
+                                    modifier = Modifier.size(32.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Delete,
+                                        contentDescription = "حذف",
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
                             }
                         }
                     }

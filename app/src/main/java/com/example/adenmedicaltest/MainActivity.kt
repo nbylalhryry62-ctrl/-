@@ -4,21 +4,34 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.activity.viewModels
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.LayoutDirection
+import androidx.credentials.CredentialManager
+import androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory.Companion.APPLICATION_KEY
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
+import com.example.adenmedicaltest.data.repository.AuthRepository
+import com.example.adenmedicaltest.data.repository.ExamRepository
+import com.example.adenmedicaltest.data.repository.SyllabusRepository
+import com.example.adenmedicaltest.ui.auth.authStateFlow
+import com.example.adenmedicaltest.ui.auth.signOut
 import com.example.adenmedicaltest.ui.components.AppTopBar
 import com.example.adenmedicaltest.ui.navigation.Screen
 import com.example.adenmedicaltest.ui.screens.AdminDashboardScreen
+import com.example.adenmedicaltest.ui.screens.AuthScreen
 import com.example.adenmedicaltest.ui.screens.DashboardScreen
 import com.example.adenmedicaltest.ui.screens.ExamScreen
 import com.example.adenmedicaltest.ui.screens.ProfileScreen
@@ -28,10 +41,12 @@ import com.example.adenmedicaltest.ui.screens.SubjectLevelsScreen
 import com.example.adenmedicaltest.ui.screens.SyllabusScreen
 import com.example.adenmedicaltest.ui.theme.AdenMedicalTestTheme
 import com.example.adenmedicaltest.ui.viewmodel.MainViewModel
+import com.google.firebase.Firebase
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.auth
+import com.google.firebase.firestore.FirebaseFirestore
 
 class MainActivity : ComponentActivity() {
-
-    private val viewModel: MainViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -40,7 +55,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
                 AdenMedicalTestTheme {
-                    MainApp(viewModel = viewModel)
+                    AppNavigation()
                 }
             }
         }
@@ -48,15 +63,54 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
+fun AppNavigation(auth: FirebaseAuth = Firebase.auth) {
+    val currentUser by auth.authStateFlow().collectAsStateWithLifecycle(initialValue = auth.currentUser)
+    val user = currentUser
+
+    if (user == null) {
+        // Navigation-Level Auth Gate: Feature screens & ViewModels are NOT composed until signed in
+        AuthScreen()
+    } else {
+        // Keyed by user.uid so switching accounts creates a fresh ViewModel instance
+        val viewModel: MainViewModel = viewModel(
+            key = user.uid,
+            factory = viewModelFactory {
+                initializer {
+                    val app = checkNotNull(this[APPLICATION_KEY]) {
+                        "APPLICATION_KEY missing from CreationExtras"
+                    }
+                    // CRITICAL: Resolve named Firestore database ID from string resources
+                    val databaseId = app.getString(R.string.firestore_database_id)
+                    val db = FirebaseFirestore.getInstance(databaseId)
+                    MainViewModel(
+                        examRepository = ExamRepository(db, app),
+                        syllabusRepository = SyllabusRepository(app),
+                        authRepository = AuthRepository(db),
+                        currentUserId = user.uid,
+                        currentUserEmail = user.email ?: "",
+                        currentUserDisplayName = user.displayName
+                    )
+                }
+            }
+        )
+        MainApp(viewModel = viewModel)
+    }
+}
+
+@Composable
 fun MainApp(viewModel: MainViewModel) {
-    val currentScreen by viewModel.currentScreen.collectAsState()
-    val currentUser by viewModel.currentUser.collectAsState()
-    val results by viewModel.results.collectAsState()
-    val activeExam by viewModel.activeExam.collectAsState()
-    val lastResult by viewModel.lastResult.collectAsState()
-    val subjectLevels by viewModel.subjectLevels.collectAsState()
-    val selectedLevelsSubject by viewModel.selectedLevelsSubject.collectAsState()
-    val syllabusMap by viewModel.syllabusMap.collectAsState()
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
+    val credentialManager = remember(context) { CredentialManager.create(context) }
+
+    val currentScreen by viewModel.currentScreen.collectAsStateWithLifecycle()
+    val currentUser by viewModel.currentUser.collectAsStateWithLifecycle()
+    val results by viewModel.results.collectAsStateWithLifecycle()
+    val activeExam by viewModel.activeExam.collectAsStateWithLifecycle()
+    val lastResult by viewModel.lastResult.collectAsStateWithLifecycle()
+    val subjectLevels by viewModel.subjectLevels.collectAsStateWithLifecycle()
+    val selectedLevelsSubject by viewModel.selectedLevelsSubject.collectAsStateWithLifecycle()
+    val syllabusMap by viewModel.syllabusMap.collectAsStateWithLifecycle()
 
     val showTopBar = currentScreen !is Screen.Exam
 
@@ -146,8 +200,15 @@ fun MainApp(viewModel: MainViewModel) {
                 is Screen.Profile -> {
                     ProfileScreen(
                         user = currentUser,
-                        onUpdateEmail = { email -> viewModel.login(email) },
-                        onToggleRole = { viewModel.toggleAdminRole() },
+                        onUpdateFullName = { fullName -> viewModel.updateProfileFullName(fullName) },
+                        onSignOut = {
+                            signOut(
+                                context = context,
+                                credentialManager = credentialManager,
+                                onSignOutComplete = {},
+                                scope = coroutineScope
+                            )
+                        },
                         onBack = { viewModel.navigateTo(Screen.Dashboard) }
                     )
                 }

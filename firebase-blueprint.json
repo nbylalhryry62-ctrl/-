@@ -1,0 +1,135 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Student or administrator profile for the Aden Medical Test portal.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "The authenticated Firebase Auth UID of the user."
+        },
+        "email": {
+          "type": "string",
+          "description": "The user's email address."
+        },
+        "username": {
+          "type": "string",
+          "description": "Short display username derived from email or user input."
+        },
+        "fullName": {
+          "type": "string",
+          "description": "Full name of the student."
+        },
+        "role": {
+          "type": "string",
+          "enum": ["student", "admin"],
+          "description": "User role in the portal."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when the profile was created (FieldValue.serverTimestamp())."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when the profile was last updated (FieldValue.serverTimestamp())."
+        }
+      },
+      "required": ["userId", "email", "username", "fullName", "role", "createdAt", "updatedAt"]
+    },
+    "ExamResult": {
+      "title": "ExamResult",
+      "description": "Completed exam attempt result for a specific subject and level.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "The UID of the student who completed the exam."
+        },
+        "subjectId": {
+          "type": "string",
+          "enum": ["biology", "chemistry", "english"],
+          "description": "Identifier of the tested subject."
+        },
+        "subjectName": {
+          "type": "string",
+          "description": "Arabic display name of the subject."
+        },
+        "level": {
+          "type": "string",
+          "description": "Exam level identifier (e.g., '1', '2', 'random', 'all')."
+        },
+        "score": {
+          "type": "integer",
+          "description": "Number of correct answers."
+        },
+        "total": {
+          "type": "integer",
+          "description": "Total number of questions in the exam."
+        },
+        "percentage": {
+          "type": "integer",
+          "description": "Percentage score from 0 to 100."
+        },
+        "passed": {
+          "type": "boolean",
+          "description": "Whether the student met the passing threshold (>= 50%)."
+        },
+        "timeTakenSeconds": {
+          "type": "integer",
+          "description": "Time spent on the exam in seconds."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when the exam result was recorded (FieldValue.serverTimestamp())."
+        }
+      },
+      "required": [
+        "userId",
+        "subjectId",
+        "subjectName",
+        "level",
+        "score",
+        "total",
+        "percentage",
+        "passed",
+        "timeTakenSeconds",
+        "createdAt"
+      ]
+    },
+    "AdminRecord": {
+      "title": "AdminRecord",
+      "description": "Trusted administrator lookup document.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "The UID of the administrator."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when the admin record was created."
+        }
+      },
+      "required": ["userId", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "User profile documents keyed by Firebase Auth UID."
+    },
+    "/users/{userId}/results/{resultId}": {
+      "schema": { "$ref": "#/entities/ExamResult" },
+      "description": "Per-user exam attempt results subcollection."
+    },
+    "/admins/{adminId}": {
+      "schema": { "$ref": "#/entities/AdminRecord" },
+      "description": "Trusted administrator lookup collection."
+    }
+  }
+}
