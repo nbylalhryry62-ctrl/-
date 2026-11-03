@@ -24,8 +24,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Cancel
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Flag
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
@@ -34,6 +36,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -74,6 +77,8 @@ fun ExamScreen(
     onCancel: () -> Unit,
     hintMap: Map<String, AiUiState> = emptyMap(),
     onRequestHint: (Question) -> Unit = {},
+    explanationMap: Map<String, AiUiState> = emptyMap(),
+    onExplainSelection: (Question, String) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier
 ) {
     var showConfirmDialog by remember { mutableStateOf(false) }
@@ -195,6 +200,9 @@ fun ExamScreen(
         ) {
             if (currentQuestion != null) {
                 val currentHintState = hintMap[currentQuestion.id]
+                val currentExplanationState = explanationMap[currentQuestion.id]
+                val hasAnsweredCurrent = selectedOption != null
+                val isCurrentAnswerCorrect = selectedOption == currentQuestion.correctKey
 
                 Card(
                     shape = RoundedCornerShape(20.dp),
@@ -210,18 +218,41 @@ fun ExamScreen(
                             fontSize = 17.sp,
                             fontWeight = FontWeight.Bold,
                             lineHeight = 26.sp,
-                            color = MaterialTheme.colorScheme.onSurface
+                            color = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.testTag("exam_question_text")
                         )
 
                         Spacer(modifier = Modifier.height(20.dp))
 
-                        // Options
+                        // Options with Immediate Answer Evaluation
                         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                             currentQuestion.options.forEach { option ->
                                 val isSelected = selectedOption == option.key
+                                val isCorrectOption = option.key == currentQuestion.correctKey
 
-                                val borderColor = if (isSelected) IndigoPrimary else Slate200
-                                val bgColor = if (isSelected) Color(0xFFEEF2FF) else MaterialTheme.colorScheme.surface
+                                val borderColor = when {
+                                    hasAnsweredCurrent && isCorrectOption -> EmeraldSuccess
+                                    hasAnsweredCurrent && isSelected && !isCorrectOption -> RoseError
+                                    isSelected -> IndigoPrimary
+                                    else -> Slate200
+                                }
+                                val bgColor = when {
+                                    hasAnsweredCurrent && isCorrectOption -> Color(0xFFECFDF5)
+                                    hasAnsweredCurrent && isSelected && !isCorrectOption -> Color(0xFFFFF1F2)
+                                    isSelected -> Color(0xFFEEF2FF)
+                                    else -> MaterialTheme.colorScheme.surface
+                                }
+                                val keyBadgeBg = when {
+                                    hasAnsweredCurrent && isCorrectOption -> EmeraldSuccess
+                                    hasAnsweredCurrent && isSelected && !isCorrectOption -> RoseError
+                                    isSelected -> IndigoPrimary
+                                    else -> MaterialTheme.colorScheme.surfaceVariant
+                                }
+                                val keyBadgeText = if (hasAnsweredCurrent && (isCorrectOption || isSelected) || isSelected) {
+                                    Color.White
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                }
 
                                 Box(
                                     modifier = Modifier
@@ -231,6 +262,7 @@ fun ExamScreen(
                                         .background(bgColor)
                                         .clickable {
                                             onAnswer(currentQuestion.id, option.key)
+                                            onExplainSelection(currentQuestion, option.key)
                                         }
                                         .padding(14.dp)
                                         .testTag("option_${option.key}")
@@ -244,33 +276,287 @@ fun ExamScreen(
                                             modifier = Modifier
                                                 .size(32.dp)
                                                 .clip(CircleShape)
-                                                .background(if (isSelected) IndigoPrimary else MaterialTheme.colorScheme.surfaceVariant),
+                                                .background(keyBadgeBg),
                                             contentAlignment = Alignment.Center
                                         ) {
                                             Text(
                                                 text = option.key,
                                                 fontWeight = FontWeight.Bold,
                                                 fontSize = 14.sp,
-                                                color = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
+                                                color = keyBadgeText
                                             )
                                         }
 
                                         Spacer(modifier = Modifier.width(12.dp))
 
-                                        Text(
-                                            text = option.text,
-                                            fontSize = 14.sp,
-                                            color = MaterialTheme.colorScheme.onSurface,
-                                            modifier = Modifier.weight(1f)
-                                        )
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                text = option.text,
+                                                fontSize = 14.sp,
+                                                fontWeight = if (hasAnsweredCurrent && (isCorrectOption || isSelected)) {
+                                                    FontWeight.Bold
+                                                } else {
+                                                    FontWeight.Normal
+                                                },
+                                                color = MaterialTheme.colorScheme.onSurface
+                                            )
 
-                                        if (isSelected) {
+                                            if (hasAnsweredCurrent) {
+                                                if (isCorrectOption && isSelected) {
+                                                    Text(
+                                                        text = "إجابتك صحيحة ✓",
+                                                        fontSize = 11.sp,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = EmeraldSuccess
+                                                    )
+                                                } else if (isCorrectOption) {
+                                                    Text(
+                                                        text = "الخيار الصحيح ✓",
+                                                        fontSize = 11.sp,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = EmeraldSuccess
+                                                    )
+                                                } else if (isSelected) {
+                                                    Text(
+                                                        text = "اختيارك (إجابة خاطئة ✗)",
+                                                        fontSize = 11.sp,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = RoseError
+                                                    )
+                                                }
+                                            }
+                                        }
+
+                                        if (hasAnsweredCurrent && isCorrectOption) {
                                             Icon(
                                                 imageVector = Icons.Default.CheckCircle,
-                                                contentDescription = null,
-                                                tint = IndigoPrimary,
-                                                modifier = Modifier.size(20.dp)
+                                                contentDescription = "إجابة صحيحة",
+                                                tint = EmeraldSuccess,
+                                                modifier = Modifier.size(22.dp)
                                             )
+                                        } else if (hasAnsweredCurrent && isSelected && !isCorrectOption) {
+                                            Icon(
+                                                imageVector = Icons.Default.Cancel,
+                                                contentDescription = "إجابة خاطئة",
+                                                tint = RoseError,
+                                                modifier = Modifier.size(22.dp)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // Immediate Correction & Explanation Card (Appears immediately upon selecting an option)
+                        if (hasAnsweredCurrent && selectedOption != null) {
+                            val selectedOptText = currentQuestion.options.find { it.key == selectedOption }?.text.orEmpty()
+                            val correctOptText = currentQuestion.options.find { it.key == currentQuestion.correctKey }?.text.orEmpty()
+
+                            Spacer(modifier = Modifier.height(16.dp))
+
+                            Card(
+                                shape = RoundedCornerShape(16.dp),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = if (isCurrentAnswerCorrect) Color(0xFFF0FDF4) else Color(0xFFFFF1F2)
+                                ),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .border(
+                                        width = 1.5.dp,
+                                        color = if (isCurrentAnswerCorrect) EmeraldSuccess else RoseError,
+                                        shape = RoundedCornerShape(16.dp)
+                                    )
+                                    .testTag("instant_feedback_card")
+                            ) {
+                                Column(modifier = Modifier.padding(14.dp)) {
+                                    // Status Header: Correct or Wrong
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = if (isCurrentAnswerCorrect) Icons.Default.CheckCircle else Icons.Default.Cancel,
+                                            contentDescription = null,
+                                            tint = if (isCurrentAnswerCorrect) EmeraldSuccess else RoseError,
+                                            modifier = Modifier.size(22.dp)
+                                        )
+                                        Text(
+                                            text = if (isCurrentAnswerCorrect) {
+                                                "إجابة صحيحة! أحسنت الاختيار"
+                                            } else {
+                                                "إجابة خاطئة — تعرّف على التصحيح الصحيح"
+                                            },
+                                            fontSize = 15.sp,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            color = if (isCurrentAnswerCorrect) Color(0xFF065F46) else Color(0xFF9F1239)
+                                        )
+                                    }
+
+                                    Spacer(modifier = Modifier.height(10.dp))
+
+                                    // Selected vs Correct Option Breakdown
+                                    Surface(
+                                        shape = RoundedCornerShape(12.dp),
+                                        color = Color.White,
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Column(modifier = Modifier.padding(12.dp)) {
+                                            Row(
+                                                verticalAlignment = Alignment.Top,
+                                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                            ) {
+                                                Text(
+                                                    text = "إجابتك:",
+                                                    fontSize = 12.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = Slate600
+                                                )
+                                                Text(
+                                                    text = "($selectedOption) $selectedOptText — ${if (isCurrentAnswerCorrect) "صحيحة ✓" else "خاطئة ✗"}",
+                                                    fontSize = 12.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = if (isCurrentAnswerCorrect) EmeraldSuccess else RoseError
+                                                )
+                                            }
+
+                                            if (!isCurrentAnswerCorrect) {
+                                                Spacer(modifier = Modifier.height(6.dp))
+                                                Row(
+                                                    verticalAlignment = Alignment.Top,
+                                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                                ) {
+                                                    Text(
+                                                        text = "الخيار الصحيح:",
+                                                        fontSize = 12.sp,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = Slate600
+                                                    )
+                                                    Text(
+                                                        text = "(${currentQuestion.correctKey}) $correctOptText ✓",
+                                                        fontSize = 12.sp,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = EmeraldSuccess
+                                                    )
+                                                }
+                                            }
+
+                                            HorizontalDivider(
+                                                modifier = Modifier.padding(vertical = 8.dp),
+                                                color = Slate200
+                                            )
+
+                                            // Reason / Explanation
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Info,
+                                                    contentDescription = null,
+                                                    tint = IndigoPrimary,
+                                                    modifier = Modifier.size(16.dp)
+                                                )
+                                                Text(
+                                                    text = "التصحيح وسبب اختيار الإجابة:",
+                                                    fontSize = 12.sp,
+                                                    fontWeight = FontWeight.ExtraBold,
+                                                    color = IndigoPrimary
+                                                )
+                                            }
+
+                                            Spacer(modifier = Modifier.height(4.dp))
+
+                                            val baseExplanation = if (currentQuestion.explanation.isNotBlank()) {
+                                                if (isCurrentAnswerCorrect) {
+                                                    "إجابتك ($selectedOption: $selectedOptText) صحيحة. ${currentQuestion.explanation}"
+                                                } else {
+                                                    "اختيارك ($selectedOption: $selectedOptText) غير صحيح لهذا السؤال. ${currentQuestion.explanation}"
+                                                }
+                                            } else {
+                                                if (isCurrentAnswerCorrect) {
+                                                    "إجابتك ($selectedOption: $selectedOptText) هي الإجابة العلمية الصحيحة المعتمدة لهذا السؤال."
+                                                } else {
+                                                    "اختيارك ($selectedOption: $selectedOptText) خاطئ، والإجابة العلمية الصحيحة المعتمدة هي (${currentQuestion.correctKey}: $correctOptText)."
+                                                }
+                                            }
+
+                                            Text(
+                                                text = baseExplanation,
+                                                fontSize = 13.sp,
+                                                lineHeight = 20.sp,
+                                                color = MaterialTheme.colorScheme.onSurface,
+                                                modifier = Modifier.testTag("instant_explanation_text")
+                                            )
+
+                                            // Live AI Detailed Explanation if available or loading
+                                            if (currentExplanationState != null && currentExplanationState !is AiUiState.Idle) {
+                                                Spacer(modifier = Modifier.height(8.dp))
+                                                Surface(
+                                                    shape = RoundedCornerShape(10.dp),
+                                                    color = Color(0xFFEEF2FF),
+                                                    modifier = Modifier.fillMaxWidth()
+                                                ) {
+                                                    Column(modifier = Modifier.padding(10.dp)) {
+                                                        Row(
+                                                            verticalAlignment = Alignment.CenterVertically,
+                                                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                                        ) {
+                                                            Icon(
+                                                                imageVector = Icons.Default.AutoAwesome,
+                                                                contentDescription = null,
+                                                                tint = IndigoPrimary,
+                                                                modifier = Modifier.size(14.dp)
+                                                            )
+                                                            Text(
+                                                                text = "التفصيل العلمي الإضافي:",
+                                                                fontSize = 11.sp,
+                                                                fontWeight = FontWeight.Bold,
+                                                                color = IndigoPrimary
+                                                            )
+                                                        }
+                                                        Spacer(modifier = Modifier.height(4.dp))
+                                                        when (currentExplanationState) {
+                                                            is AiUiState.Loading -> {
+                                                                Row(
+                                                                    verticalAlignment = Alignment.CenterVertically,
+                                                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                                                ) {
+                                                                    CircularProgressIndicator(
+                                                                        modifier = Modifier.size(14.dp),
+                                                                        color = IndigoPrimary,
+                                                                        strokeWidth = 2.dp
+                                                                    )
+                                                                    Text(
+                                                                        text = "جاري إعداد التعليل التفصيلي...",
+                                                                        fontSize = 11.sp,
+                                                                        color = IndigoPrimary
+                                                                    )
+                                                                }
+                                                            }
+                                                            is AiUiState.Streaming -> {
+                                                                Text(
+                                                                    text = currentExplanationState.text,
+                                                                    fontSize = 12.sp,
+                                                                    lineHeight = 18.sp,
+                                                                    color = MaterialTheme.colorScheme.onSurface
+                                                                )
+                                                            }
+                                                            is AiUiState.Success -> {
+                                                                Text(
+                                                                    text = currentExplanationState.text,
+                                                                    fontSize = 12.sp,
+                                                                    lineHeight = 18.sp,
+                                                                    color = MaterialTheme.colorScheme.onSurface
+                                                                )
+                                                            }
+                                                            is AiUiState.Error -> {
+                                                                // Keep built-in explanation clean if offline/error
+                                                            }
+                                                            else -> {}
+                                                        }
+                                                    }
+                                                }
+                                            }
                                         }
                                     }
                                 }
@@ -279,83 +565,85 @@ fun ExamScreen(
 
                         Spacer(modifier = Modifier.height(10.dp))
 
-                        // Gemini AI Hint Button & Box
-                        TextButton(
-                            onClick = { onRequestHint(currentQuestion) },
-                            modifier = Modifier.testTag("btn_ai_hint")
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.AutoAwesome,
-                                contentDescription = null,
-                                tint = IndigoPrimary,
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = "تلميح علمي ذكي (Gemini)",
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = IndigoPrimary
-                            )
-                        }
-
-                        if (currentHintState != null && currentHintState !is AiUiState.Idle) {
-                            Spacer(modifier = Modifier.height(6.dp))
-                            Surface(
-                                shape = RoundedCornerShape(12.dp),
-                                color = Color(0xFFEEF2FF),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .testTag("ai_hint_box")
+                        // Gemini AI Hint Button & Box (helpful before answering)
+                        if (!hasAnsweredCurrent) {
+                            TextButton(
+                                onClick = { onRequestHint(currentQuestion) },
+                                modifier = Modifier.testTag("btn_ai_hint")
                             ) {
-                                Column(modifier = Modifier.padding(12.dp)) {
-                                    when (currentHintState) {
-                                        is AiUiState.Loading -> {
-                                            Row(
-                                                verticalAlignment = Alignment.CenterVertically,
-                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                            ) {
-                                                CircularProgressIndicator(
-                                                    modifier = Modifier.size(16.dp),
-                                                    color = IndigoPrimary,
-                                                    strokeWidth = 2.dp
-                                                )
+                                Icon(
+                                    imageVector = Icons.Default.AutoAwesome,
+                                    contentDescription = null,
+                                    tint = IndigoPrimary,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "تلميح علمي ذكي قبل الإجابة",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = IndigoPrimary
+                                )
+                            }
+
+                            if (currentHintState != null && currentHintState !is AiUiState.Idle) {
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Surface(
+                                    shape = RoundedCornerShape(12.dp),
+                                    color = Color(0xFFEEF2FF),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .testTag("ai_hint_box")
+                                ) {
+                                    Column(modifier = Modifier.padding(12.dp)) {
+                                        when (currentHintState) {
+                                            is AiUiState.Loading -> {
+                                                Row(
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                                ) {
+                                                    CircularProgressIndicator(
+                                                        modifier = Modifier.size(16.dp),
+                                                        color = IndigoPrimary,
+                                                        strokeWidth = 2.dp
+                                                    )
+                                                    Text(
+                                                        text = "جاري تحضير التلميح الذكي...",
+                                                        fontSize = 12.sp,
+                                                        color = IndigoPrimary
+                                                    )
+                                                }
+                                            }
+
+                                            is AiUiState.Streaming -> {
                                                 Text(
-                                                    text = "جاري تحضير التلميح الذكي...",
+                                                    text = currentHintState.text,
                                                     fontSize = 12.sp,
-                                                    color = IndigoPrimary
+                                                    lineHeight = 19.sp,
+                                                    color = MaterialTheme.colorScheme.onSurface
                                                 )
                                             }
-                                        }
 
-                                        is AiUiState.Streaming -> {
-                                            Text(
-                                                text = currentHintState.text,
-                                                fontSize = 12.sp,
-                                                lineHeight = 19.sp,
-                                                color = MaterialTheme.colorScheme.onSurface
-                                            )
-                                        }
+                                            is AiUiState.Success -> {
+                                                Text(
+                                                    text = currentHintState.text,
+                                                    fontSize = 12.sp,
+                                                    lineHeight = 19.sp,
+                                                    color = MaterialTheme.colorScheme.onSurface
+                                                )
+                                            }
 
-                                        is AiUiState.Success -> {
-                                            Text(
-                                                text = currentHintState.text,
-                                                fontSize = 12.sp,
-                                                lineHeight = 19.sp,
-                                                color = MaterialTheme.colorScheme.onSurface
-                                            )
-                                        }
+                                            is AiUiState.Error -> {
+                                                Text(
+                                                    text = currentHintState.message,
+                                                    fontSize = 12.sp,
+                                                    fontWeight = FontWeight.SemiBold,
+                                                    color = RoseError
+                                                )
+                                            }
 
-                                        is AiUiState.Error -> {
-                                            Text(
-                                                text = currentHintState.message,
-                                                fontSize = 12.sp,
-                                                fontWeight = FontWeight.SemiBold,
-                                                color = RoseError
-                                            )
+                                            else -> {}
                                         }
-
-                                        else -> {}
                                     }
                                 }
                             }

@@ -185,6 +185,11 @@ fun MainApp(
                         onRequestHint = { question ->
                             val subjName = activeExam?.subject?.name ?: "عام"
                             aiViewModel.requestQuestionHint(subjName, question)
+                        },
+                        explanationMap = explanationMap,
+                        onExplainSelection = { question, selectedKey ->
+                            val subjName = activeExam?.subject?.name ?: "عام"
+                            aiViewModel.explainQuestionSelectionStream(subjName, question, selectedKey)
                         }
                     )
                 }

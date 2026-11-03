@@ -27,7 +27,8 @@ data class Question(
     val id: String = "",
     val question: String = "",
     val options: List<Option> = emptyList(),
-    val correctKey: String = ""
+    val correctKey: String = "",
+    val explanation: String = ""
 )
 
 data class SubjectLevel(
@@ -46,7 +47,8 @@ data class ExamAnswer(
     val userAnswer: String? = null,
     val correctAnswer: String = "",
     val isCorrect: Boolean = false,
-    val options: List<Option> = emptyList()
+    val options: List<Option> = emptyList(),
+    val explanation: String = ""
 )
 
 @IgnoreExtraProperties

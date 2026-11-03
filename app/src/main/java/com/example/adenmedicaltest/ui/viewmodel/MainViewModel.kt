@@ -272,7 +272,8 @@ class MainViewModel(
                 userAnswer = userAns,
                 correctAnswer = q.correctKey,
                 isCorrect = userAns == q.correctKey,
-                options = q.options
+                options = q.options,
+                explanation = q.explanation
             )
         }
 

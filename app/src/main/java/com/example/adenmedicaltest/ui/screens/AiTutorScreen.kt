@@ -705,22 +705,34 @@ private fun InteractiveAiQuestionCard(
             }
 
             if (selectedIdx != null) {
+                val isAnswerCorrect = selectedIdx == item.correctOptionIndex
+                val correctOptionText = item.options.getOrNull(item.correctOptionIndex).orEmpty()
                 Spacer(modifier = Modifier.height(12.dp))
                 Surface(
                     shape = RoundedCornerShape(12.dp),
-                    color = Color(0xFFEEF2FF),
-                    modifier = Modifier.fillMaxWidth()
+                    color = if (isAnswerCorrect) Color(0xFFF0FDF4) else Color(0xFFFFF1F2),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .border(
+                            1.dp,
+                            if (isAnswerCorrect) EmeraldSuccess else RoseError,
+                            RoundedCornerShape(12.dp)
+                        )
                 ) {
                     Column(modifier = Modifier.padding(12.dp)) {
                         Text(
-                            text = "💡 التعليل العلمي:",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 12.sp,
-                            color = IndigoPrimary
+                            text = if (isAnswerCorrect) {
+                                "إجابة صحيحة ✓"
+                            } else {
+                                "إجابة خاطئة ✗ — الخيار الصحيح: $correctOptionText"
+                            },
+                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = 13.sp,
+                            color = if (isAnswerCorrect) EmeraldSuccess else RoseError
                         )
-                        Spacer(modifier = Modifier.height(4.dp))
+                        Spacer(modifier = Modifier.height(6.dp))
                         Text(
-                            text = item.explanation,
+                            text = "سبب الإجابة والتصحيح: ${item.explanation}",
                             fontSize = 12.sp,
                             lineHeight = 19.sp,
                             color = MaterialTheme.colorScheme.onSurface

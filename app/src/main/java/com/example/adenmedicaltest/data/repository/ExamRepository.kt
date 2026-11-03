@@ -54,7 +54,7 @@ class ExamRepository(
             id = "biology",
             name = "الأحياء",
             icon = "🧬",
-            description = "الإحساس والتنظيم العصبي (1-85) + التغذية والهضم (87-126) + نماذج طب بشري وأسنان وصيدلة ومختبرات وتمريض جامعة عدن — إجمالي 179 سؤالاً",
+            description = "الإحساس والتنظيم العصبي، التغذية والهضم، والوراثة ووظائف الأعضاء — إجمالي 179 سؤالاً",
             durationMinutes = 10,
             totalQuestionCount = 179
         ),
@@ -62,7 +62,7 @@ class ExamRepository(
             id = "chemistry",
             name = "الكيمياء",
             icon = "⚗️",
-            description = "اختيار من متعدد (1-43) + مسائل حسابية (44-75) + صح وخطأ وعلاقات كيميائية ونماذج طب أسنان — إجمالي 525 سؤالاً شاملاً",
+            description = "الكيمياء العضوية، الاتزان الكيميائي، الكهربائية، والمسائل الحسابية والعلاقات — إجمالي 525 سؤالاً شاملاً",
             durationMinutes = 10,
             totalQuestionCount = 525
         ),
@@ -70,11 +70,33 @@ class ExamRepository(
             id = "english",
             name = "اللغة الإنجليزية",
             icon = "📖",
-            description = "المفردات والقواعد والأزمنة (1-88) + القواعد والمفردات الطبية (150 قاعدة + 200 مفردة طبية: 89-438) — إجمالي 438 سؤالاً شاملاً",
+            description = "القواعد النحوية، الأزمنة، والتراكيب والمصطلحات الطبية المعتمدة — إجمالي 438 سؤالاً شاملاً",
             durationMinutes = 10,
             totalQuestionCount = 438
         )
     )
+
+    private fun sanitizeQuestionText(rawText: String): String {
+        var cleaned = rawText
+            .replace(Regex("^\\s*\\d+\\)\\s*"), "")
+            .replace(Regex("^\\s*\\[[^\\]]+\\]\\s*"), "")
+            .replace(Regex("\\s*\\((?:حسب النموذج|وفق النموذج|حسب المنهج|طب أسنان جامعة عدن[^)]*|ضمن Group [AB])\\)"), "")
+        val namesToStrip = listOf(
+            "محمد اليوسفي",
+            "أحمد الكوري",
+            "احمد الكوري",
+            "الدكتور جمال الجعدني",
+            "جمال الجعدني",
+            "د. جمال الجعدني",
+            "ملخص محمد اليوسفي",
+            "ملخص أحمد الكوري",
+            "ملخص احمد الكوري"
+        )
+        for (name in namesToStrip) {
+            cleaned = cleaned.replace(name, "")
+        }
+        return cleaned.replace(Regex("\\s{2,}"), " ").trim()
+    }
 
     private fun requireUserId(): String {
         return auth.currentUser?.uid
@@ -104,8 +126,9 @@ class ExamRepository(
                     for (i in 0 until arr.length()) {
                         val obj = arr.getJSONObject(i)
                         val id = obj.optString("id", "$key-$i")
-                        val questionText = obj.optString("question", "")
+                        val questionText = sanitizeQuestionText(obj.optString("question", ""))
                         val correctKey = obj.optString("correctKey", "A")
+                        val explanationText = obj.optString("explanation", "")
 
                         val optionsList = mutableListOf<Option>()
                         val optsArr = obj.optJSONArray("options") ?: JSONArray()
@@ -114,7 +137,7 @@ class ExamRepository(
                             optionsList.add(
                                 Option(
                                     key = optObj.optString("key", ""),
-                                    text = optObj.optString("text", "")
+                                    text = sanitizeQuestionText(optObj.optString("text", ""))
                                 )
                             )
                         }
@@ -124,7 +147,8 @@ class ExamRepository(
                                 id = id,
                                 question = questionText,
                                 options = optionsList,
-                                correctKey = correctKey
+                                correctKey = correctKey,
+                                explanation = explanationText
                             )
                         )
                     }

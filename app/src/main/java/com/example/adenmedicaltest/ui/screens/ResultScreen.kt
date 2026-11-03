@@ -292,6 +292,16 @@ fun ResultScreen(
                                     }
                                 }
 
+                                if (answer.explanation.isNotBlank()) {
+                                    Spacer(modifier = Modifier.height(6.dp))
+                                    Text(
+                                        text = "سبب الإجابة: ${answer.explanation}",
+                                        fontSize = 12.sp,
+                                        lineHeight = 18.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+
                                 Spacer(modifier = Modifier.height(6.dp))
 
                                 TextButton(

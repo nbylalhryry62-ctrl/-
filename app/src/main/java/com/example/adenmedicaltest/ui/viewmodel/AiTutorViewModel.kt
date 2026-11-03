@@ -114,7 +114,7 @@ class AiTutorViewModel : ViewModel() {
                 سؤال الطالب: $userQuestion
                 
                 قدم إجابة علمية دقيقة ومبسطة باللغة العربية (مع المصطلحات الطبية الإنجليزية عند الحاجة)،
-                واربط الشرح بنوعية أسئلة اختبارات القبول الطبية في الأحياء والكيمياء واللغة الإنجليزية.
+                واربط الشرح بنوعية أسئلة اختبارات القبول الطبية في الأحياء والكيمياء واللغة الإنجليزية، دون ذكر أي أسماء أشخاص في الأمثلة أو الأسئلة.
             """.trimIndent()
 
             try {
@@ -149,6 +149,7 @@ class AiTutorViewModel : ViewModel() {
             val prompt = """
                 أنشئ ملخصاً علمياً مركزاً و 3 أسئلة اختيار من متعدد (مع 4 خيارات لكل سؤال والتعليل العلمي)
                 لطلاب اختبار القبول في كلية الطب جامعة عدن في مادة ($subjectName) حول موضوع: "$topic".
+                تأكد من صياغة الأسئلة بشكل علمي بحت دون ذكر أي أسماء أشخاص.
             """.trimIndent()
 
             try {
@@ -191,21 +192,39 @@ class AiTutorViewModel : ViewModel() {
         }
     }
 
+    fun explainQuestionSelectionStream(subjectName: String, question: Question, selectedKey: String) {
+        val answer = ExamAnswer(
+            questionId = question.id,
+            question = question.question,
+            userAnswer = selectedKey,
+            correctAnswer = question.correctKey,
+            isCorrect = selectedKey == question.correctKey,
+            options = question.options,
+            explanation = question.explanation
+        )
+        explainAnswerStream(subjectName, answer)
+    }
+
     fun explainAnswerStream(subjectName: String, answer: ExamAnswer) {
         val key = answer.questionId.ifBlank { answer.question }
         viewModelScope.launch {
             _explanationMap.value = _explanationMap.value + (key to AiUiState.Loading)
             val accumulated = StringBuilder()
             val optionsFormatted = answer.options.joinToString("\n") { "${it.key}: ${it.text}" }
+            val userOptText = answer.options.find { it.key == answer.userAnswer }?.text.orEmpty()
+            val correctOptText = answer.options.find { it.key == answer.correctAnswer }?.text.orEmpty()
+            val statusLabel = if (answer.isCorrect) "إجابة الطالب صحيحة" else "إجابة الطالب خاطئة"
             val prompt = """
-                اشرح باختصار ووضوح لـ طالب طب سبب صحة الإجابة في هذا السؤال من مادة ($subjectName):
+                اشرح باختصار ووضوح لطالب طب في مادة ($subjectName) التصحيح العلمي لهذا السؤال:
                 السؤال: ${answer.question}
                 الخيارات:
                 $optionsFormatted
-                إجابة الطالب: ${answer.userAnswer ?: "لم يجب"}
-                الإجابة الصحيحة المعتمدة: ${answer.correctAnswer}
+                اختيار الطالب: ${answer.userAnswer ?: "لم يجب"} ($userOptText) — [$statusLabel]
+                الخيار الصحيح المعتمد: ${answer.correctAnswer} ($correctOptText)
                 
-                وضح المعلومة العلمية الأساسية في 3 إلى 4 أسطر واضحة ومباشرة.
+                اشرح في 3 أسطر واضحة ومباشرة:
+                1) لماذا الخيار الصحيح (${answer.correctAnswer}: $correctOptText) هو الإجابة الصحيحة علمياً.
+                2) إذا كانت إجابة الطالب خاطئة، وضح باختصار سبب خطأ اختياره (${answer.userAnswer})، دون ذكر أي أسماء أشخاص.
             """.trimIndent()
 
             try {
@@ -218,16 +237,16 @@ class AiTutorViewModel : ViewModel() {
                 if (accumulated.isNotBlank()) {
                     _explanationMap.value = _explanationMap.value + (key to AiUiState.Success(accumulated.toString()))
                 } else {
-                    _explanationMap.value = _explanationMap.value + (key to AiUiState.Error("لم يتم استلام شرح من النموذج."))
+                    _explanationMap.value = _explanationMap.value + (key to AiUiState.Error("لم يتم استلام شرح إضافي من النموذج."))
                 }
             } catch (e: TimeoutCancellationException) {
                 Log.e(TAG, "Explanation timed out", e)
-                _explanationMap.value = _explanationMap.value + (key to AiUiState.Error("انتهت مهلة طلب الشرح بعد 60 ثانية."))
+                _explanationMap.value = _explanationMap.value + (key to AiUiState.Error("انتهت مهلة طلب الشرح الإضافي."))
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 Log.e(TAG, "Explanation generation failed", e)
-                _explanationMap.value = _explanationMap.value + (key to AiUiState.Error(e.localizedMessage ?: "تعذر جلب الشرح الذكي."))
+                _explanationMap.value = _explanationMap.value + (key to AiUiState.Error(e.localizedMessage ?: "تعذر جلب الشرح الذكي الإضافي."))
             }
         }
     }
@@ -239,7 +258,7 @@ class AiTutorViewModel : ViewModel() {
             val accumulated = StringBuilder()
             val optionsFormatted = question.options.joinToString(" | ") { "${it.key}: ${it.text}" }
             val prompt = """
-                أعطِ الطالب تلميحاً علمياً ذكياً ومختصراً (في سطرين فقط) يساعده على التفكير واستنتاج الإجابة الصحيحة بنفسه دون ذكر حرف الإجابة النهائية صراحةً:
+                أعطِ الطالب تلميحاً علمياً ذكياً ومختصراً (في سطرين فقط) يساعده على التفكير واستنتاج الإجابة الصحيحة بنفسه دون ذكر حرف الإجابة النهائية صراحةً ودون ذكر أي أسماء أشخاص:
                 المادة: $subjectName
                 السؤال: ${question.question}
                 الخيارات: $optionsFormatted
