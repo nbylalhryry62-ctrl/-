@@ -27,10 +27,12 @@ import com.example.adenmedicaltest.data.repository.AuthRepository
 import com.example.adenmedicaltest.data.repository.ExamRepository
 import com.example.adenmedicaltest.data.repository.SyllabusRepository
 import com.example.adenmedicaltest.ui.auth.authStateFlow
+import com.example.adenmedicaltest.ui.auth.configureAppCheck
 import com.example.adenmedicaltest.ui.auth.signOut
 import com.example.adenmedicaltest.ui.components.AppTopBar
 import com.example.adenmedicaltest.ui.navigation.Screen
 import com.example.adenmedicaltest.ui.screens.AdminDashboardScreen
+import com.example.adenmedicaltest.ui.screens.AiTutorScreen
 import com.example.adenmedicaltest.ui.screens.AuthScreen
 import com.example.adenmedicaltest.ui.screens.DashboardScreen
 import com.example.adenmedicaltest.ui.screens.ExamScreen
@@ -40,6 +42,7 @@ import com.example.adenmedicaltest.ui.screens.ResultsHistoryScreen
 import com.example.adenmedicaltest.ui.screens.SubjectLevelsScreen
 import com.example.adenmedicaltest.ui.screens.SyllabusScreen
 import com.example.adenmedicaltest.ui.theme.AdenMedicalTestTheme
+import com.example.adenmedicaltest.ui.viewmodel.AiTutorViewModel
 import com.example.adenmedicaltest.ui.viewmodel.MainViewModel
 import com.google.firebase.Firebase
 import com.google.firebase.auth.FirebaseAuth
@@ -50,6 +53,10 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // STEP 1: Configure App Check with launch intent before any UI or Firebase operations
+        configureAppCheck(this, intent)
+
         enableEdgeToEdge()
 
         setContent {
@@ -93,12 +100,16 @@ fun AppNavigation(auth: FirebaseAuth = Firebase.auth) {
                 }
             }
         )
-        MainApp(viewModel = viewModel)
+        val aiViewModel: AiTutorViewModel = viewModel(key = "ai_${user.uid}")
+        MainApp(viewModel = viewModel, aiViewModel = aiViewModel)
     }
 }
 
 @Composable
-fun MainApp(viewModel: MainViewModel) {
+fun MainApp(
+    viewModel: MainViewModel,
+    aiViewModel: AiTutorViewModel = viewModel()
+) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     val credentialManager = remember(context) { CredentialManager.create(context) }
@@ -111,6 +122,9 @@ fun MainApp(viewModel: MainViewModel) {
     val subjectLevels by viewModel.subjectLevels.collectAsStateWithLifecycle()
     val selectedLevelsSubject by viewModel.selectedLevelsSubject.collectAsStateWithLifecycle()
     val syllabusMap by viewModel.syllabusMap.collectAsStateWithLifecycle()
+
+    val explanationMap by aiViewModel.explanationMap.collectAsStateWithLifecycle()
+    val hintMap by aiViewModel.hintMap.collectAsStateWithLifecycle()
 
     val showTopBar = currentScreen !is Screen.Exam
 
@@ -140,7 +154,8 @@ fun MainApp(viewModel: MainViewModel) {
                         onOpenLevels = { subjectId -> viewModel.openSubjectLevels(subjectId) },
                         onStartRandom = { subjectId -> viewModel.startExam(subjectId, "random") },
                         onOpenSyllabus = { viewModel.navigateTo(Screen.Syllabus) },
-                        onOpenResults = { viewModel.navigateTo(Screen.ResultsHistory) }
+                        onOpenResults = { viewModel.navigateTo(Screen.ResultsHistory) },
+                        onOpenAiTutor = { viewModel.navigateTo(Screen.AiTutor) }
                     )
                 }
 
@@ -165,7 +180,12 @@ fun MainApp(viewModel: MainViewModel) {
                         onNext = { viewModel.nextQuestion() },
                         onPrev = { viewModel.prevQuestion() },
                         onSubmit = { viewModel.submitExam() },
-                        onCancel = { viewModel.navigateTo(Screen.Dashboard) }
+                        onCancel = { viewModel.navigateTo(Screen.Dashboard) },
+                        hintMap = hintMap,
+                        onRequestHint = { question ->
+                            val subjName = activeExam?.subject?.name ?: "عام"
+                            aiViewModel.requestQuestionHint(subjName, question)
+                        }
                     )
                 }
 
@@ -175,7 +195,11 @@ fun MainApp(viewModel: MainViewModel) {
                         result = res,
                         onBack = { viewModel.navigateTo(Screen.Dashboard) },
                         onRetry = { viewModel.retryCurrentExam() },
-                        onHistory = { viewModel.navigateTo(Screen.ResultsHistory) }
+                        onHistory = { viewModel.navigateTo(Screen.ResultsHistory) },
+                        explanationMap = explanationMap,
+                        onExplainAnswer = { answer ->
+                            aiViewModel.explainAnswerStream(res.subjectName, answer)
+                        }
                     )
                 }
 
@@ -194,6 +218,13 @@ fun MainApp(viewModel: MainViewModel) {
                         syllabusMap = syllabusMap,
                         onBack = { viewModel.navigateTo(Screen.Dashboard) },
                         onOpenLevels = { subjectId -> viewModel.openSubjectLevels(subjectId) }
+                    )
+                }
+
+                is Screen.AiTutor -> {
+                    AiTutorScreen(
+                        aiViewModel = aiViewModel,
+                        onBack = { viewModel.navigateTo(Screen.Dashboard) }
                     )
                 }
 

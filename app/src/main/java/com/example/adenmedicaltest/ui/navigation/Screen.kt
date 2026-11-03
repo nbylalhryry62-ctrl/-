@@ -4,6 +4,7 @@ sealed class Screen(val route: String) {
     data object Dashboard : Screen("dashboard")
     data object ResultsHistory : Screen("results_history")
     data object Syllabus : Screen("syllabus")
+    data object AiTutor : Screen("ai_tutor")
     data object Profile : Screen("profile")
     data object Admin : Screen("admin")
 

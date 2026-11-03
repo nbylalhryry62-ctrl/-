@@ -19,6 +19,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.EmojiEvents
@@ -27,11 +28,13 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -42,10 +45,12 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.adenmedicaltest.data.model.ExamAnswer
 import com.example.adenmedicaltest.data.model.ExamResult
 import com.example.adenmedicaltest.ui.theme.EmeraldSuccess
 import com.example.adenmedicaltest.ui.theme.IndigoPrimary
 import com.example.adenmedicaltest.ui.theme.RoseError
+import com.example.adenmedicaltest.ui.viewmodel.AiUiState
 
 @Composable
 fun ResultScreen(
@@ -53,6 +58,8 @@ fun ResultScreen(
     onBack: () -> Unit,
     onRetry: () -> Unit,
     onHistory: () -> Unit,
+    explanationMap: Map<String, AiUiState> = emptyMap(),
+    onExplainAnswer: (ExamAnswer) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     BackHandler { onBack() }
@@ -225,6 +232,9 @@ fun ResultScreen(
             }
 
             itemsIndexed(result.answers) { index, answer ->
+                val answerKey = answer.questionId.ifBlank { answer.question }
+                val aiState = explanationMap[answerKey]
+
                 Card(
                     shape = RoundedCornerShape(14.dp),
                     colors = CardDefaults.cardColors(
@@ -232,50 +242,138 @@ fun ResultScreen(
                     ),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Row(
+                    Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(14.dp),
-                        verticalAlignment = Alignment.Top,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            .padding(14.dp)
                     ) {
-                        Icon(
-                            imageVector = if (answer.isCorrect) Icons.Default.CheckCircle else Icons.Default.Close,
-                            contentDescription = null,
-                            tint = if (answer.isCorrect) EmeraldSuccess else RoseError,
-                            modifier = Modifier
-                                .size(20.dp)
-                                .padding(top = 2.dp)
-                        )
-
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "س${index + 1}: ${answer.question}",
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.onSurface
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.Top,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Icon(
+                                imageVector = if (answer.isCorrect) Icons.Default.CheckCircle else Icons.Default.Close,
+                                contentDescription = null,
+                                tint = if (answer.isCorrect) EmeraldSuccess else RoseError,
+                                modifier = Modifier
+                                    .size(20.dp)
+                                    .padding(top = 2.dp)
                             )
 
-                            Spacer(modifier = Modifier.height(6.dp))
-
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(12.dp)
-                            ) {
+                            Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = "إجابتك: ${answer.userAnswer ?: "بلا إجابة"}",
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = if (answer.isCorrect) EmeraldSuccess else RoseError
+                                    text = "س${index + 1}: ${answer.question}",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurface
                                 )
 
-                                if (!answer.isCorrect) {
+                                Spacer(modifier = Modifier.height(6.dp))
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                ) {
                                     Text(
-                                        text = "الصحيحة: ${answer.correctAnswer}",
+                                        text = "إجابتك: ${answer.userAnswer ?: "بلا إجابة"}",
                                         fontSize = 12.sp,
                                         fontWeight = FontWeight.Bold,
-                                        color = EmeraldSuccess
+                                        color = if (answer.isCorrect) EmeraldSuccess else RoseError
                                     )
+
+                                    if (!answer.isCorrect) {
+                                        Text(
+                                            text = "الصحيحة: ${answer.correctAnswer}",
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = EmeraldSuccess
+                                        )
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(6.dp))
+
+                                TextButton(
+                                    onClick = { onExplainAnswer(answer) },
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                    modifier = Modifier.testTag("btn_ai_explain_$index")
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.AutoAwesome,
+                                        contentDescription = null,
+                                        tint = IndigoPrimary,
+                                        modifier = Modifier.size(15.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = "اشرح الإجابة بالذكاء الاصطناعي (Gemini)",
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = IndigoPrimary
+                                    )
+                                }
+                            }
+                        }
+
+                        if (aiState != null && aiState !is AiUiState.Idle) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = Color.White,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("ai_explanation_box_$index")
+                            ) {
+                                Column(modifier = Modifier.padding(12.dp)) {
+                                    when (aiState) {
+                                        is AiUiState.Loading -> {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                            ) {
+                                                CircularProgressIndicator(
+                                                    modifier = Modifier.size(16.dp),
+                                                    color = IndigoPrimary,
+                                                    strokeWidth = 2.dp
+                                                )
+                                                Text(
+                                                    text = "جاري تحليل السؤال علمياً...",
+                                                    fontSize = 12.sp,
+                                                    color = IndigoPrimary
+                                                )
+                                            }
+                                        }
+
+                                        is AiUiState.Streaming -> {
+                                            Text(
+                                                text = aiState.text,
+                                                fontSize = 12.sp,
+                                                lineHeight = 19.sp,
+                                                color = MaterialTheme.colorScheme.onSurface
+                                            )
+                                        }
+
+                                        is AiUiState.Success -> {
+                                            Text(
+                                                text = aiState.text,
+                                                fontSize = 12.sp,
+                                                lineHeight = 19.sp,
+                                                color = MaterialTheme.colorScheme.onSurface
+                                            )
+                                        }
+
+                                        is AiUiState.Error -> {
+                                            Text(
+                                                text = aiState.message,
+                                                fontSize = 12.sp,
+                                                fontWeight = FontWeight.SemiBold,
+                                                color = RoseError
+                                            )
+                                        }
+
+                                        else -> {}
+                                    }
                                 }
                             }
                         }

@@ -23,6 +23,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material.icons.filled.Timer
@@ -32,12 +33,14 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -52,12 +55,14 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.adenmedicaltest.data.model.Question
 import com.example.adenmedicaltest.ui.theme.EmeraldSuccess
 import com.example.adenmedicaltest.ui.theme.IndigoPrimary
 import com.example.adenmedicaltest.ui.theme.RoseError
 import com.example.adenmedicaltest.ui.theme.Slate200
 import com.example.adenmedicaltest.ui.theme.Slate600
 import com.example.adenmedicaltest.ui.viewmodel.ActiveExamState
+import com.example.adenmedicaltest.ui.viewmodel.AiUiState
 
 @Composable
 fun ExamScreen(
@@ -67,6 +72,8 @@ fun ExamScreen(
     onPrev: () -> Unit,
     onSubmit: () -> Unit,
     onCancel: () -> Unit,
+    hintMap: Map<String, AiUiState> = emptyMap(),
+    onRequestHint: (Question) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var showConfirmDialog by remember { mutableStateOf(false) }
@@ -187,6 +194,8 @@ fun ExamScreen(
                 .padding(16.dp)
         ) {
             if (currentQuestion != null) {
+                val currentHintState = hintMap[currentQuestion.id]
+
                 Card(
                     shape = RoundedCornerShape(20.dp),
                     colors = CardDefaults.cardColors(
@@ -263,6 +272,90 @@ fun ExamScreen(
                                                 modifier = Modifier.size(20.dp)
                                             )
                                         }
+                                    }
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        // Gemini AI Hint Button & Box
+                        TextButton(
+                            onClick = { onRequestHint(currentQuestion) },
+                            modifier = Modifier.testTag("btn_ai_hint")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.AutoAwesome,
+                                contentDescription = null,
+                                tint = IndigoPrimary,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "تلميح علمي ذكي (Gemini)",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = IndigoPrimary
+                            )
+                        }
+
+                        if (currentHintState != null && currentHintState !is AiUiState.Idle) {
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = Color(0xFFEEF2FF),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("ai_hint_box")
+                            ) {
+                                Column(modifier = Modifier.padding(12.dp)) {
+                                    when (currentHintState) {
+                                        is AiUiState.Loading -> {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                            ) {
+                                                CircularProgressIndicator(
+                                                    modifier = Modifier.size(16.dp),
+                                                    color = IndigoPrimary,
+                                                    strokeWidth = 2.dp
+                                                )
+                                                Text(
+                                                    text = "جاري تحضير التلميح الذكي...",
+                                                    fontSize = 12.sp,
+                                                    color = IndigoPrimary
+                                                )
+                                            }
+                                        }
+
+                                        is AiUiState.Streaming -> {
+                                            Text(
+                                                text = currentHintState.text,
+                                                fontSize = 12.sp,
+                                                lineHeight = 19.sp,
+                                                color = MaterialTheme.colorScheme.onSurface
+                                            )
+                                        }
+
+                                        is AiUiState.Success -> {
+                                            Text(
+                                                text = currentHintState.text,
+                                                fontSize = 12.sp,
+                                                lineHeight = 19.sp,
+                                                color = MaterialTheme.colorScheme.onSurface
+                                            )
+                                        }
+
+                                        is AiUiState.Error -> {
+                                            Text(
+                                                text = currentHintState.message,
+                                                fontSize = 12.sp,
+                                                fontWeight = FontWeight.SemiBold,
+                                                color = RoseError
+                                            )
+                                        }
+
+                                        else -> {}
                                     }
                                 }
                             }

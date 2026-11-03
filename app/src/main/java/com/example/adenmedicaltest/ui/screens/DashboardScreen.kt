@@ -19,6 +19,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Book
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.PlayArrow
@@ -63,6 +64,7 @@ fun DashboardScreen(
     onStartRandom: (String) -> Unit,
     onOpenSyllabus: () -> Unit,
     onOpenResults: () -> Unit,
+    onOpenAiTutor: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val totalQuestions = subjects.sumOf { it.totalQuestionCount }
@@ -158,6 +160,24 @@ fun DashboardScreen(
                                     fontSize = 13.sp,
                                     fontWeight = FontWeight.Bold
                                 )
+                            }
+
+                            Button(
+                                onClick = onOpenAiTutor,
+                                shape = RoundedCornerShape(12.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color(0xFF10B981),
+                                    contentColor = Color.White
+                                ),
+                                modifier = Modifier.testTag("btn_hero_ai_tutor")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.AutoAwesome,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("المعلم الذكي", fontSize = 13.sp, fontWeight = FontWeight.Bold)
                             }
                         }
                     }

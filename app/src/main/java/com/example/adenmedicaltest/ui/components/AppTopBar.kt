@@ -12,6 +12,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AdminPanelSettings
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Book
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Person
@@ -110,6 +111,17 @@ fun AppTopBar(
                         imageVector = Icons.Default.School,
                         contentDescription = "المنهج",
                         tint = if (currentScreen is Screen.Syllabus) IndigoPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                IconButton(
+                    onClick = { onNavigate(Screen.AiTutor) },
+                    modifier = Modifier.testTag("nav_ai_tutor")
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.AutoAwesome,
+                        contentDescription = "المعلم الذكي",
+                        tint = if (currentScreen is Screen.AiTutor) IndigoPrimary else MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
 
