@@ -108,14 +108,31 @@ fun ExamScreen(
     val selectedOption = currentQuestion?.let { examState.answers[it.id] }
     val isLastQuestion = examState.currentIndex == examState.questions.size - 1
 
-    val isUrgentTime = examState.secondsRemaining < 60
+    val isUrgentTime = examState.secondsRemaining in 1..59
+    val isWarningTime = examState.secondsRemaining in 60..119
     val timerBgColor by animateColorAsState(
-        targetValue = if (isUrgentTime) Color(0xFFFFE4E6) else MaterialTheme.colorScheme.surfaceVariant,
+        targetValue = when {
+            isUrgentTime -> Color(0xFFFFE4E6)
+            isWarningTime -> Color(0xFFFEF3C7)
+            else -> Color(0xFFEEF2FF)
+        },
         label = "timerBg"
     )
     val timerTextColor by animateColorAsState(
-        targetValue = if (isUrgentTime) RoseError else MaterialTheme.colorScheme.onSurfaceVariant,
+        targetValue = when {
+            isUrgentTime -> RoseError
+            isWarningTime -> Color(0xFFD97706)
+            else -> IndigoPrimary
+        },
         label = "timerText"
+    )
+    val timerBarColor by animateColorAsState(
+        targetValue = when {
+            isUrgentTime -> RoseError
+            isWarningTime -> Color(0xFFD97706)
+            else -> EmeraldSuccess
+        },
+        label = "timerBar"
     )
 
     Column(
@@ -123,10 +140,10 @@ fun ExamScreen(
             .fillMaxSize()
             .testTag("exam_screen")
     ) {
-        // Sticky Header with Timer & Progress
+        // Sticky Header with Full-Quiz Countdown Timer & Question Progress
         Surface(
             color = MaterialTheme.colorScheme.surface,
-            shadowElevation = 2.dp,
+            shadowElevation = 3.dp,
             modifier = Modifier.fillMaxWidth()
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
@@ -135,7 +152,7 @@ fun ExamScreen(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column {
+                    Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = "${examState.subject.icon} ${examState.subject.name}",
                             fontWeight = FontWeight.Bold,
@@ -149,45 +166,127 @@ fun ExamScreen(
                         )
                     }
 
-                    // Timer Chip
+                    // Full-Quiz Countdown Timer Chip
                     Surface(
                         shape = RoundedCornerShape(12.dp),
                         color = timerBgColor,
-                        modifier = Modifier.testTag("exam_timer")
+                        modifier = Modifier
+                            .border(
+                                width = 1.dp,
+                                color = timerTextColor.copy(alpha = 0.35f),
+                                shape = RoundedCornerShape(12.dp)
+                            )
+                            .testTag("exam_timer")
                     ) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp)
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Timer,
-                                contentDescription = "الوقت",
+                                contentDescription = "الوقت المتبقي للاختبار",
                                 tint = timerTextColor,
-                                modifier = Modifier.size(16.dp)
+                                modifier = Modifier.size(17.dp)
                             )
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = examState.formattedTime,
-                                color = timerTextColor,
-                                fontWeight = FontWeight.Bold,
-                                fontFamily = FontFamily.Monospace,
-                                fontSize = 14.sp
-                            )
+                            Column(horizontalAlignment = Alignment.End) {
+                                Text(
+                                    text = examState.formattedTime,
+                                    color = timerTextColor,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    fontFamily = FontFamily.Monospace,
+                                    fontSize = 15.sp
+                                )
+                                Text(
+                                    text = "من ${examState.formattedTotalTime}",
+                                    color = timerTextColor.copy(alpha = 0.8f),
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
                         }
                     }
                 }
 
                 Spacer(modifier = Modifier.height(10.dp))
 
+                // Countdown Timer Progress Bar for Entire Quiz
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "الوقت المتبقي للاختبار الكامل (تسليم تلقائي عند انتهاء الوقت)",
+                        fontSize = 11.sp,
+                        color = if (isUrgentTime) RoseError else MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontWeight = if (isUrgentTime) FontWeight.Bold else FontWeight.Medium
+                    )
+                    Text(
+                        text = "${(examState.timeProgress * 100).toInt()}%",
+                        fontSize = 11.sp,
+                        fontFamily = FontFamily.Monospace,
+                        fontWeight = FontWeight.Bold,
+                        color = timerTextColor
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                LinearProgressIndicator(
+                    progress = { examState.timeProgress },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(6.dp)
+                        .clip(RoundedCornerShape(3.dp))
+                        .testTag("exam_timer_progress"),
+                    color = timerBarColor,
+                    trackColor = MaterialTheme.colorScheme.surfaceVariant
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Question Progress Bar
                 LinearProgressIndicator(
                     progress = { examState.progress },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(6.dp)
+                        .height(5.dp)
                         .clip(RoundedCornerShape(3.dp)),
                     color = IndigoPrimary,
                     trackColor = MaterialTheme.colorScheme.surfaceVariant
                 )
+
+                if (isUrgentTime) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = Color(0xFFFFF1F2),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .border(1.dp, RoseError.copy(alpha = 0.4f), RoundedCornerShape(10.dp))
+                            .testTag("exam_low_time_warning")
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Warning,
+                                contentDescription = null,
+                                tint = RoseError,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Text(
+                                text = "تنبيه: تبقى أقل من دقيقة واحدة! سيتم تسليم الاختبار تلقائياً عند انتهاء الوقت.",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = RoseError
+                            )
+                        }
+                    }
+                }
             }
         }
 

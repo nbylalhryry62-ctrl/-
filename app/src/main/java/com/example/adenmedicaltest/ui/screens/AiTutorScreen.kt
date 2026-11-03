@@ -28,8 +28,10 @@ import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ErrorOutline
+import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.Quiz
+import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Button
@@ -40,6 +42,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
@@ -47,6 +50,7 @@ import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateMapOf
@@ -59,6 +63,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -72,6 +77,7 @@ import com.example.adenmedicaltest.ui.viewmodel.AiGeneratedQuestion
 import com.example.adenmedicaltest.ui.viewmodel.AiTutorViewModel
 import com.example.adenmedicaltest.ui.viewmodel.AiUiState
 import com.example.adenmedicaltest.ui.viewmodel.QuizGenUiState
+import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -89,6 +95,32 @@ fun AiTutorScreen(
     var selectedSubject by remember { mutableStateOf("الأحياء") }
     var promptInput by remember { mutableStateOf("") }
     var topicInput by remember { mutableStateOf("السيال العصبي والتشابك العصبي") }
+
+    val practiceTotalSeconds = 180
+    var practiceSecondsRemaining by remember { mutableIntStateOf(practiceTotalSeconds) }
+    var isPracticeSubmitted by remember { mutableStateOf(false) }
+    var isPracticeTimedOut by remember { mutableStateOf(false) }
+    val practiceSelectedAnswers = remember { mutableStateMapOf<Int, Int>() }
+
+    LaunchedEffect(quizGenState) {
+        if (quizGenState is QuizGenUiState.Success) {
+            practiceSelectedAnswers.clear()
+            practiceSecondsRemaining = practiceTotalSeconds
+            isPracticeSubmitted = false
+            isPracticeTimedOut = false
+            while (practiceSecondsRemaining > 0 && !isPracticeSubmitted) {
+                delay(1000L)
+                if (!isPracticeSubmitted) {
+                    practiceSecondsRemaining -= 1
+                    if (practiceSecondsRemaining <= 0) {
+                        practiceSecondsRemaining = 0
+                        isPracticeTimedOut = true
+                        isPracticeSubmitted = true
+                    }
+                }
+            }
+        }
+    }
 
     val subjectOptions = listOf("الأحياء", "الكيمياء", "اللغة الإنجليزية")
 
@@ -503,6 +535,129 @@ fun AiTutorScreen(
 
                 is QuizGenUiState.Success -> {
                     item {
+                        val mins = practiceSecondsRemaining / 60
+                        val secs = practiceSecondsRemaining % 60
+                        val formattedTimer = "%02d:%02d".format(mins, secs)
+                        val timeProgress = (practiceSecondsRemaining.toFloat() / practiceTotalSeconds.toFloat()).coerceIn(0f, 1f)
+                        val isLowTime = practiceSecondsRemaining in 1..45
+                        val correctScore = qState.questions.indices.count { idx ->
+                            practiceSelectedAnswers[idx] == qState.questions[idx].correctOptionIndex
+                        }
+
+                        Card(
+                            shape = RoundedCornerShape(18.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = when {
+                                    isPracticeSubmitted && isPracticeTimedOut -> Color(0xFFFFF1F2)
+                                    isPracticeSubmitted -> Color(0xFFF0FDF4)
+                                    isLowTime -> Color(0xFFFFF1F2)
+                                    else -> MaterialTheme.colorScheme.surface
+                                }
+                            ),
+                            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("ai_practice_timer_card")
+                        ) {
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Timer,
+                                            contentDescription = "مؤقت الاختبار التدريبي",
+                                            tint = if (isLowTime || isPracticeTimedOut) RoseError else IndigoPrimary,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                        Column {
+                                            Text(
+                                                text = when {
+                                                    isPracticeTimedOut -> "انتهى الوقت — تم تسليم الاختبار تلقائياً"
+                                                    isPracticeSubmitted -> "تم تسليم الاختبار التدريبي"
+                                                    else -> "مؤقت الاختبار التدريبي الكامل"
+                                                },
+                                                fontWeight = FontWeight.ExtraBold,
+                                                fontSize = 14.sp,
+                                                color = when {
+                                                    isPracticeTimedOut -> RoseError
+                                                    isPracticeSubmitted -> EmeraldSuccess
+                                                    isLowTime -> RoseError
+                                                    else -> MaterialTheme.colorScheme.onSurface
+                                                }
+                                            )
+                                            Text(
+                                                text = if (isPracticeSubmitted) {
+                                                    "النتيجة النهائية: $correctScore من ${qState.questions.size}"
+                                                } else {
+                                                    "أجبت على ${practiceSelectedAnswers.size} من ${qState.questions.size} · يُسلّم تلقائياً عند انتهاء الوقت"
+                                                },
+                                                fontSize = 12.sp,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                    }
+
+                                    Surface(
+                                        shape = RoundedCornerShape(10.dp),
+                                        color = if (isLowTime || isPracticeTimedOut) Color(0xFFFFE4E6) else Color(0xFFEEF2FF)
+                                    ) {
+                                        Text(
+                                            text = formattedTimer,
+                                            fontFamily = FontFamily.Monospace,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            fontSize = 14.sp,
+                                            color = if (isLowTime || isPracticeTimedOut) RoseError else IndigoPrimary,
+                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                                        )
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(10.dp))
+
+                                LinearProgressIndicator(
+                                    progress = { timeProgress },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(6.dp)
+                                        .clip(RoundedCornerShape(3.dp)),
+                                    color = if (isLowTime || isPracticeTimedOut) RoseError else EmeraldSuccess,
+                                    trackColor = MaterialTheme.colorScheme.surfaceVariant
+                                )
+
+                                if (!isPracticeSubmitted) {
+                                    Spacer(modifier = Modifier.height(10.dp))
+                                    Button(
+                                        onClick = { isPracticeSubmitted = true },
+                                        shape = RoundedCornerShape(10.dp),
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = EmeraldSuccess,
+                                            contentColor = Color.White
+                                        ),
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(40.dp)
+                                            .testTag("btn_submit_practice_quiz")
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Flag,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text("تسليم الاختبار التدريبي الآن", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    item {
                         Card(
                             shape = RoundedCornerShape(18.dp),
                             colors = CardDefaults.cardColors(containerColor = Color(0xFFEEF2FF)),
@@ -531,7 +686,14 @@ fun AiTutorScreen(
                     itemsIndexed(qState.questions) { index, qItem ->
                         InteractiveAiQuestionCard(
                             index = index,
-                            item = qItem
+                            item = qItem,
+                            selectedIdx = practiceSelectedAnswers[index],
+                            isQuizSubmitted = isPracticeSubmitted,
+                            onSelectOption = { optIdx ->
+                                if (!isPracticeSubmitted) {
+                                    practiceSelectedAnswers[index] = optIdx
+                                }
+                            }
                         )
                     }
                 }
@@ -623,10 +785,12 @@ fun AiErrorCard(message: String) {
 @Composable
 private fun InteractiveAiQuestionCard(
     index: Int,
-    item: AiGeneratedQuestion
+    item: AiGeneratedQuestion,
+    selectedIdx: Int?,
+    isQuizSubmitted: Boolean,
+    onSelectOption: (Int) -> Unit
 ) {
-    val selectedMap = remember(item) { mutableStateMapOf<Int, Int>() }
-    val selectedIdx = selectedMap[index]
+    val showFeedback = selectedIdx != null || isQuizSubmitted
 
     Card(
         shape = RoundedCornerShape(18.dp),
@@ -649,7 +813,6 @@ private fun InteractiveAiQuestionCard(
                 item.options.forEachIndexed { optIdx, optText ->
                     val isSelected = selectedIdx == optIdx
                     val isCorrect = optIdx == item.correctOptionIndex
-                    val showFeedback = selectedIdx != null
 
                     val borderColor = when {
                         showFeedback && isCorrect -> EmeraldSuccess
@@ -669,7 +832,7 @@ private fun InteractiveAiQuestionCard(
                             .clip(RoundedCornerShape(12.dp))
                             .border(1.5.dp, borderColor, RoundedCornerShape(12.dp))
                             .background(bgColor)
-                            .clickable { selectedMap[index] = optIdx }
+                            .clickable(enabled = !isQuizSubmitted) { onSelectOption(optIdx) }
                             .padding(12.dp)
                     ) {
                         Row(
@@ -704,7 +867,7 @@ private fun InteractiveAiQuestionCard(
                 }
             }
 
-            if (selectedIdx != null) {
+            if (showFeedback) {
                 val isAnswerCorrect = selectedIdx == item.correctOptionIndex
                 val correctOptionText = item.options.getOrNull(item.correctOptionIndex).orEmpty()
                 Spacer(modifier = Modifier.height(12.dp))
@@ -721,10 +884,10 @@ private fun InteractiveAiQuestionCard(
                 ) {
                     Column(modifier = Modifier.padding(12.dp)) {
                         Text(
-                            text = if (isAnswerCorrect) {
-                                "إجابة صحيحة ✓"
-                            } else {
-                                "إجابة خاطئة ✗ — الخيار الصحيح: $correctOptionText"
+                            text = when {
+                                isAnswerCorrect -> "إجابة صحيحة ✓"
+                                selectedIdx == null -> "لم تتم الإجابة قبل انتهاء الوقت ✗ — الخيار الصحيح: $correctOptionText"
+                                else -> "إجابة خاطئة ✗ — الخيار الصحيح: $correctOptionText"
                             },
                             fontWeight = FontWeight.ExtraBold,
                             fontSize = 13.sp,

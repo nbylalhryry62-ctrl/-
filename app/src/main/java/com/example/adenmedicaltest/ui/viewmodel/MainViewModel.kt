@@ -37,6 +37,7 @@ data class ActiveExamState(
     val questions: List<Question> = emptyList(),
     val currentIndex: Int = 0,
     val answers: Map<String, String> = emptyMap(),
+    val totalDurationSeconds: Int = 600,
     val secondsRemaining: Int = 600,
     val isTimerRunning: Boolean = false,
     val isSubmitted: Boolean = false
@@ -50,10 +51,24 @@ data class ActiveExamState(
     val progress: Float
         get() = if (questions.isNotEmpty()) (currentIndex + 1).toFloat() / questions.size else 0f
 
+    val timeProgress: Float
+        get() = if (totalDurationSeconds > 0) {
+            (secondsRemaining.toFloat() / totalDurationSeconds.toFloat()).coerceIn(0f, 1f)
+        } else {
+            0f
+        }
+
     val formattedTime: String
         get() {
             val mins = secondsRemaining / 60
             val secs = secondsRemaining % 60
+            return "%02d:%02d".format(mins, secs)
+        }
+
+    val formattedTotalTime: String
+        get() {
+            val mins = totalDurationSeconds / 60
+            val secs = totalDurationSeconds % 60
             return "%02d:%02d".format(mins, secs)
         }
 }
@@ -131,6 +146,9 @@ class MainViewModel(
     private val _lastResult = MutableStateFlow<ExamResult?>(null)
     val lastResult: StateFlow<ExamResult?> = _lastResult.asStateFlow()
 
+    private val _wasAutoSubmittedOnTimeout = MutableStateFlow(false)
+    val wasAutoSubmittedOnTimeout: StateFlow<Boolean> = _wasAutoSubmittedOnTimeout.asStateFlow()
+
     private val _subjectLevels = MutableStateFlow<List<SubjectLevel>>(emptyList())
     val subjectLevels: StateFlow<List<SubjectLevel>> = _subjectLevels.asStateFlow()
 
@@ -172,7 +190,16 @@ class MainViewModel(
     }
 
     fun navigateTo(screen: Screen) {
+        if (screen !is Screen.Exam) {
+            timerJob?.cancel()
+        }
         _currentScreen.value = screen
+    }
+
+    fun cancelExam() {
+        timerJob?.cancel()
+        _activeExam.value = null
+        _currentScreen.value = Screen.Dashboard
     }
 
     fun openSubjectLevels(subjectId: String) {
@@ -201,13 +228,21 @@ class MainViewModel(
                 q.copy(options = q.options.shuffled())
             }
 
+            val totalDurationSeconds = if (level == "all") {
+                maxOf(subject.durationMinutes * 60, shuffledQuestions.size * 24)
+            } else {
+                (subject.durationMinutes * 60).coerceAtLeast(60)
+            }
+
+            _wasAutoSubmittedOnTimeout.value = false
             _activeExam.value = ActiveExamState(
                 subject = subject,
                 level = level,
                 questions = shuffledQuestions,
                 currentIndex = 0,
                 answers = emptyMap(),
-                secondsRemaining = 600,
+                totalDurationSeconds = totalDurationSeconds,
+                secondsRemaining = totalDurationSeconds,
                 isTimerRunning = true,
                 isSubmitted = false
             )
@@ -223,11 +258,15 @@ class MainViewModel(
             while (true) {
                 delay(1000)
                 val current = _activeExam.value ?: break
-                if (current.isSubmitted) break
-                val remaining = current.secondsRemaining - 1
+                if (current.isSubmitted || !current.isTimerRunning) break
+                val elapsedSeconds = ((System.currentTimeMillis() - examStartTime) / 1000).toInt()
+                val remaining = (current.totalDurationSeconds - elapsedSeconds).coerceAtMost(current.secondsRemaining - 1)
                 if (remaining <= 0) {
-                    _activeExam.value = current.copy(secondsRemaining = 0)
-                    submitExam()
+                    _activeExam.value = current.copy(
+                        secondsRemaining = 0,
+                        isTimerRunning = false
+                    )
+                    submitExam(autoSubmittedByTimer = true)
                     break
                 } else {
                     _activeExam.value = current.copy(secondsRemaining = remaining)
@@ -238,6 +277,7 @@ class MainViewModel(
 
     fun answerQuestion(questionId: String, selectedKey: String) {
         val current = _activeExam.value ?: return
+        if (current.isSubmitted) return
         val updatedAnswers = current.answers.toMutableMap()
         updatedAnswers[questionId] = selectedKey
         _activeExam.value = current.copy(answers = updatedAnswers)
@@ -257,12 +297,19 @@ class MainViewModel(
         }
     }
 
-    fun submitExam() {
+    fun submitExam(autoSubmittedByTimer: Boolean = false) {
         val current = _activeExam.value ?: return
         if (current.isSubmitted) return
         timerJob?.cancel()
 
-        val timeTakenSeconds = ((System.currentTimeMillis() - examStartTime) / 1000).toInt().coerceIn(0, 600)
+        _wasAutoSubmittedOnTimeout.value = autoSubmittedByTimer
+
+        val timeTakenSeconds = if (autoSubmittedByTimer) {
+            current.totalDurationSeconds
+        } else {
+            ((System.currentTimeMillis() - examStartTime) / 1000).toInt()
+                .coerceIn(1, current.totalDurationSeconds)
+        }
 
         val answersDetails = current.questions.map { q ->
             val userAns = current.answers[q.id]
@@ -295,7 +342,11 @@ class MainViewModel(
             answers = answersDetails
         )
 
-        _activeExam.value = current.copy(isSubmitted = true)
+        _activeExam.value = current.copy(
+            secondsRemaining = if (autoSubmittedByTimer) 0 else current.secondsRemaining,
+            isTimerRunning = false,
+            isSubmitted = true
+        )
         _lastResult.value = result
         _currentScreen.value = Screen.Result(result)
 

@@ -119,6 +119,7 @@ fun MainApp(
     val results by viewModel.results.collectAsStateWithLifecycle()
     val activeExam by viewModel.activeExam.collectAsStateWithLifecycle()
     val lastResult by viewModel.lastResult.collectAsStateWithLifecycle()
+    val wasAutoSubmittedOnTimeout by viewModel.wasAutoSubmittedOnTimeout.collectAsStateWithLifecycle()
     val subjectLevels by viewModel.subjectLevels.collectAsStateWithLifecycle()
     val selectedLevelsSubject by viewModel.selectedLevelsSubject.collectAsStateWithLifecycle()
     val syllabusMap by viewModel.syllabusMap.collectAsStateWithLifecycle()
@@ -180,7 +181,7 @@ fun MainApp(
                         onNext = { viewModel.nextQuestion() },
                         onPrev = { viewModel.prevQuestion() },
                         onSubmit = { viewModel.submitExam() },
-                        onCancel = { viewModel.navigateTo(Screen.Dashboard) },
+                        onCancel = { viewModel.cancelExam() },
                         hintMap = hintMap,
                         onRequestHint = { question ->
                             val subjName = activeExam?.subject?.name ?: "عام"
@@ -201,6 +202,7 @@ fun MainApp(
                         onBack = { viewModel.navigateTo(Screen.Dashboard) },
                         onRetry = { viewModel.retryCurrentExam() },
                         onHistory = { viewModel.navigateTo(Screen.ResultsHistory) },
+                        wasAutoSubmittedOnTimeout = wasAutoSubmittedOnTimeout,
                         explanationMap = explanationMap,
                         onExplainAnswer = { answer ->
                             aiViewModel.explainAnswerStream(res.subjectName, answer)

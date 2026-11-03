@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -42,6 +43,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -58,6 +60,7 @@ fun ResultScreen(
     onBack: () -> Unit,
     onRetry: () -> Unit,
     onHistory: () -> Unit,
+    wasAutoSubmittedOnTimeout: Boolean = false,
     explanationMap: Map<String, AiUiState> = emptyMap(),
     onExplainAnswer: (ExamAnswer) -> Unit = {},
     modifier: Modifier = Modifier
@@ -65,6 +68,10 @@ fun ResultScreen(
     BackHandler { onBack() }
 
     val passed = result.passed
+    val formattedTimeTaken = "%02d:%02d".format(
+        result.timeTakenSeconds / 60,
+        result.timeTakenSeconds % 60
+    )
 
     LazyColumn(
         modifier = modifier
@@ -73,6 +80,44 @@ fun ResultScreen(
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
+        if (wasAutoSubmittedOnTimeout) {
+            item {
+                Card(
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF1F2)),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("timeout_auto_submit_banner")
+                ) {
+                    Row(
+                        modifier = Modifier.padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Timer,
+                            contentDescription = null,
+                            tint = RoseError,
+                            modifier = Modifier.size(22.dp)
+                        )
+                        Column {
+                            Text(
+                                text = "انتهى الوقت المحدد للاختبار",
+                                fontWeight = FontWeight.ExtraBold,
+                                fontSize = 14.sp,
+                                color = RoseError
+                            )
+                            Text(
+                                text = "تم تسليم الاختبار وتصحيح إجاباتك تلقائياً عند انتهاء المؤقت الزمني.",
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
         // Result Banner
         item {
             Card(
@@ -130,6 +175,33 @@ fun ResultScreen(
                             fontSize = 15.sp,
                             fontWeight = FontWeight.Medium
                         )
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        Surface(
+                            shape = RoundedCornerShape(20.dp),
+                            color = Color.White.copy(alpha = 0.18f)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Timer,
+                                    contentDescription = null,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Text(
+                                    text = "الوقت المستغرق: $formattedTimeTaken",
+                                    color = Color.White,
+                                    fontSize = 12.sp,
+                                    fontFamily = FontFamily.Monospace,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
                     }
                 }
             }
