@@ -11,8 +11,11 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -31,6 +34,7 @@ import com.example.adenmedicaltest.ui.auth.configureAppCheck
 import com.example.adenmedicaltest.ui.auth.signOut
 import com.example.adenmedicaltest.ui.components.AppTopBar
 import com.example.adenmedicaltest.ui.navigation.Screen
+import com.example.adenmedicaltest.ui.screens.AboutPrivacyScreen
 import com.example.adenmedicaltest.ui.screens.AdminDashboardScreen
 import com.example.adenmedicaltest.ui.screens.AiTutorScreen
 import com.example.adenmedicaltest.ui.screens.AuthScreen
@@ -73,14 +77,31 @@ class MainActivity : ComponentActivity() {
 fun AppNavigation(auth: FirebaseAuth = Firebase.auth) {
     val currentUser by auth.authStateFlow().collectAsStateWithLifecycle(initialValue = auth.currentUser)
     val user = currentUser
+    var isOfflineMode by rememberSaveable { mutableStateOf(false) }
+    var showPreAuthPrivacy by rememberSaveable { mutableStateOf(false) }
 
-    if (user == null) {
-        // Navigation-Level Auth Gate: Feature screens & ViewModels are NOT composed until signed in
-        AuthScreen()
+    if (showPreAuthPrivacy && user == null && !isOfflineMode) {
+        AboutPrivacyScreen(
+            onBack = { showPreAuthPrivacy = false }
+        )
+        return
+    }
+
+    if (user == null && !isOfflineMode) {
+        // Navigation-Level Auth Gate with option for Offline Local Study Mode
+        AuthScreen(
+            onAuthSuccess = { isOfflineMode = false },
+            onEnterOfflineMode = { isOfflineMode = true },
+            onOpenAboutPrivacy = { showPreAuthPrivacy = true }
+        )
     } else {
-        // Keyed by user.uid so switching accounts creates a fresh ViewModel instance
+        val effectiveUid = user?.uid ?: ExamRepository.LOCAL_OFFLINE_USER_ID
+        val effectiveEmail = user?.email ?: ""
+        val effectiveDisplayName = user?.displayName ?: "طالب كلية الطب (الوضع المحلي)"
+
+        // Keyed by effectiveUid so switching accounts creates a fresh ViewModel instance
         val viewModel: MainViewModel = viewModel(
-            key = user.uid,
+            key = effectiveUid,
             factory = viewModelFactory {
                 initializer {
                     val app = checkNotNull(this[APPLICATION_KEY]) {
@@ -93,22 +114,27 @@ fun AppNavigation(auth: FirebaseAuth = Firebase.auth) {
                         examRepository = ExamRepository(db, app),
                         syllabusRepository = SyllabusRepository(app),
                         authRepository = AuthRepository(db),
-                        currentUserId = user.uid,
-                        currentUserEmail = user.email ?: "",
-                        currentUserDisplayName = user.displayName
+                        currentUserId = effectiveUid,
+                        currentUserEmail = effectiveEmail,
+                        currentUserDisplayName = effectiveDisplayName
                     )
                 }
             }
         )
-        val aiViewModel: AiTutorViewModel = viewModel(key = "ai_${user.uid}")
-        MainApp(viewModel = viewModel, aiViewModel = aiViewModel)
+        val aiViewModel: AiTutorViewModel = viewModel(key = "ai_$effectiveUid")
+        MainApp(
+            viewModel = viewModel,
+            aiViewModel = aiViewModel,
+            onExitOfflineMode = { isOfflineMode = false }
+        )
     }
 }
 
 @Composable
 fun MainApp(
     viewModel: MainViewModel,
-    aiViewModel: AiTutorViewModel = viewModel()
+    aiViewModel: AiTutorViewModel = viewModel(),
+    onExitOfflineMode: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -118,6 +144,7 @@ fun MainApp(
     val currentUser by viewModel.currentUser.collectAsStateWithLifecycle()
     val results by viewModel.results.collectAsStateWithLifecycle()
     val activeExam by viewModel.activeExam.collectAsStateWithLifecycle()
+    val savedDraft by viewModel.savedDraft.collectAsStateWithLifecycle()
     val lastResult by viewModel.lastResult.collectAsStateWithLifecycle()
     val wasAutoSubmittedOnTimeout by viewModel.wasAutoSubmittedOnTimeout.collectAsStateWithLifecycle()
     val subjectLevels by viewModel.subjectLevels.collectAsStateWithLifecycle()
@@ -156,7 +183,11 @@ fun MainApp(
                         onStartRandom = { subjectId -> viewModel.startExam(subjectId, "random") },
                         onOpenSyllabus = { viewModel.navigateTo(Screen.Syllabus) },
                         onOpenResults = { viewModel.navigateTo(Screen.ResultsHistory) },
-                        onOpenAiTutor = { viewModel.navigateTo(Screen.AiTutor) }
+                        onOpenAiTutor = { viewModel.navigateTo(Screen.AiTutor) },
+                        onOpenAboutPrivacy = { viewModel.navigateTo(Screen.AboutPrivacy) },
+                        savedDraft = savedDraft,
+                        onResumeDraft = { viewModel.resumeSavedDraft() },
+                        onDiscardDraft = { viewModel.discardSavedDraft() }
                     )
                 }
 
@@ -215,7 +246,8 @@ fun MainApp(
                         results = results,
                         onRetry = { subjectId, level -> viewModel.startExam(subjectId, level) },
                         onDelete = { id -> viewModel.deleteResult(id) },
-                        onDashboard = { viewModel.navigateTo(Screen.Dashboard) }
+                        onDashboard = { viewModel.navigateTo(Screen.Dashboard) },
+                        onReviewResult = { item -> viewModel.openResultReview(item) }
                     )
                 }
 
@@ -240,14 +272,19 @@ fun MainApp(
                         user = currentUser,
                         onUpdateFullName = { fullName -> viewModel.updateProfileFullName(fullName) },
                         onSignOut = {
-                            signOut(
-                                context = context,
-                                credentialManager = credentialManager,
-                                onSignOutComplete = {},
-                                scope = coroutineScope
-                            )
+                            if (currentUser?.userId == ExamRepository.LOCAL_OFFLINE_USER_ID) {
+                                onExitOfflineMode()
+                            } else {
+                                signOut(
+                                    context = context,
+                                    credentialManager = credentialManager,
+                                    onSignOutComplete = {},
+                                    scope = coroutineScope
+                                )
+                            }
                         },
-                        onBack = { viewModel.navigateTo(Screen.Dashboard) }
+                        onBack = { viewModel.navigateTo(Screen.Dashboard) },
+                        onOpenAboutPrivacy = { viewModel.navigateTo(Screen.AboutPrivacy) }
                     )
                 }
 
@@ -256,6 +293,12 @@ fun MainApp(
                         username = currentUser?.username ?: "المشرف",
                         results = results,
                         subjects = viewModel.subjects,
+                        onBack = { viewModel.navigateTo(Screen.Dashboard) }
+                    )
+                }
+
+                is Screen.AboutPrivacy -> {
+                    AboutPrivacyScreen(
                         onBack = { viewModel.navigateTo(Screen.Dashboard) }
                     )
                 }

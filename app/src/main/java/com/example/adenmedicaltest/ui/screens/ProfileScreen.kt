@@ -52,6 +52,7 @@ fun ProfileScreen(
     onUpdateFullName: (String) -> Unit,
     onSignOut: () -> Unit,
     onBack: () -> Unit,
+    onOpenAboutPrivacy: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     BackHandler { onBack() }
@@ -102,7 +103,11 @@ fun ProfileScreen(
                 )
 
                 Text(
-                    text = if (user?.role == "admin") "حساب مشرف" else "حساب طالب مسجل عبر Google",
+                    text = when {
+                        user?.role == "admin" -> "حساب مشرف"
+                        user?.userId == "offline_student" -> "وضع التدريب المحلي دون اتصال"
+                        else -> "حساب طالب مسجل عبر Google"
+                    },
                     fontSize = 12.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -116,13 +121,13 @@ fun ProfileScreen(
                 ) {
                     Column(modifier = Modifier.padding(14.dp)) {
                         Text(
-                            text = "البريد الإلكتروني:",
+                            text = "البريد الإلكتروني / الوضع:",
                             fontSize = 12.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Spacer(modifier = Modifier.height(2.dp))
                         Text(
-                            text = user?.email ?: "",
+                            text = user?.email?.ifBlank { "محفوظ محلياً على هذا الجهاز" } ?: "محفوظ محلياً على هذا الجهاز",
                             fontSize = 14.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = MaterialTheme.colorScheme.onSurface
@@ -132,35 +137,54 @@ fun ProfileScreen(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                OutlinedTextField(
-                    value = fullNameInput,
-                    onValueChange = { fullNameInput = it },
-                    label = { Text("الاسم الكامل") },
-                    singleLine = true,
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("input_full_name")
-                )
+                if (user?.userId != "offline_student") {
+                    OutlinedTextField(
+                        value = fullNameInput,
+                        onValueChange = { fullNameInput = it },
+                        label = { Text("الاسم الكامل") },
+                        singleLine = true,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("input_full_name")
+                    )
 
-                Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
 
-                Button(
-                    onClick = { onUpdateFullName(fullNameInput) },
+                    Button(
+                        onClick = { onUpdateFullName(fullNameInput) },
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = IndigoPrimary),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(44.dp)
+                            .testTag("btn_save_profile")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Save,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("حفظ الاسم في السحابة", fontWeight = FontWeight.Bold)
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+                }
+
+                OutlinedButton(
+                    onClick = onOpenAboutPrivacy,
                     shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = IndigoPrimary),
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(44.dp)
-                        .testTag("btn_save_profile")
+                        .testTag("btn_profile_about_privacy")
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.Save,
-                        contentDescription = null,
-                        modifier = Modifier.size(16.dp)
+                    Text(
+                        text = "معلومات التطبيق وسياسة الخصوصية",
+                        color = IndigoPrimary,
+                        fontWeight = FontWeight.Bold
                     )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text("حفظ الاسم في السحابة", fontWeight = FontWeight.Bold)
                 }
 
                 Spacer(modifier = Modifier.height(10.dp))
@@ -181,7 +205,7 @@ fun ProfileScreen(
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = "تسجيل الخروج",
+                        text = if (user?.userId == "offline_student") "العودة لشاشة تسجيل الدخول" else "تسجيل الخروج",
                         color = RoseError,
                         fontWeight = FontWeight.Bold
                     )

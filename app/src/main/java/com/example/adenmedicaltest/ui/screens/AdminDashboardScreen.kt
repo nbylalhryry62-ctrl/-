@@ -207,7 +207,7 @@ fun AdminDashboardScreen(
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = "تعمل قاعدة بيانات النتائج محليًا عبر Room Database على هذا الجهاز، مما يتيح للطلاب التدرّب بشكل كامل بدون انقطاع حتى بدون اتصال بالإنترنت.",
+                        text = "يعمل نظام حفظ النتائج بآلية مزدوجة (محلياً على الجهاز وسحابياً عبر Firebase Firestore)، مما يضمن عدم ضياع نتائج الطلاب وإمكانية التدرب الكامل حتى دون اتصال بالإنترنت.",
                         fontSize = 12.sp,
                         lineHeight = 18.sp,
                         color = Color(0xFF78350F)

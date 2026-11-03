@@ -1,6 +1,7 @@
 package com.example.adenmedicaltest.ui.screens
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -19,6 +20,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -51,6 +53,7 @@ fun ResultsHistoryScreen(
     onRetry: (subjectId: String, level: String) -> Unit,
     onDelete: (id: String) -> Unit,
     onDashboard: () -> Unit,
+    onReviewResult: (ExamResult) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     BackHandler { onDashboard() }
@@ -72,13 +75,13 @@ fun ResultsHistoryScreen(
             ) {
                 Column {
                     Text(
-                        text = "سجل النتائج السحابي",
+                        text = "سجل نتائج الاختبارات السابقة",
                         fontSize = 20.sp,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
-                        text = "المحاولات المحفوظة في حسابك (${results.size})",
+                        text = "المحاولات المحفوظة (${results.size})",
                         fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -116,13 +119,13 @@ fun ResultsHistoryScreen(
                         )
                         Spacer(modifier = Modifier.height(12.dp))
                         Text(
-                            text = "لا توجد نتائج مسجلة في حسابك بعد",
+                            text = "لا توجد نتائج مسجلة بعد",
                             fontWeight = FontWeight.Bold,
                             fontSize = 16.sp
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = "ابدأ اختبارًا الآن وسيتم حفظ درجاتك تلقائيًا في حسابك على السحابة.",
+                            text = "ابدأ اختبارًا الآن وسيتم حفظ درجاتك وتفاصيل إجاباتك تلقائيًا محليًا وعلى السحابة.",
                             fontSize = 12.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -150,6 +153,7 @@ fun ResultsHistoryScreen(
                     elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
                     modifier = Modifier
                         .fillMaxWidth()
+                        .clickable { onReviewResult(item) }
                         .testTag("history_item_${item.id}")
                 ) {
                     Row(
@@ -176,7 +180,7 @@ fun ResultsHistoryScreen(
 
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
                             Text(
                                 text = "${item.percentage}%",
@@ -184,6 +188,25 @@ fun ResultsHistoryScreen(
                                 fontSize = 18.sp,
                                 color = if (item.passed) EmeraldSuccess else RoseError
                             )
+
+                            if (item.answers.isNotEmpty()) {
+                                OutlinedButton(
+                                    onClick = { onReviewResult(item) },
+                                    shape = RoundedCornerShape(8.dp),
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                                    modifier = Modifier
+                                        .height(34.dp)
+                                        .testTag("btn_review_${item.id}")
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Visibility,
+                                        contentDescription = "مراجعة",
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("مراجعة", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
 
                             Button(
                                 onClick = { onRetry(item.subjectId, item.level) },

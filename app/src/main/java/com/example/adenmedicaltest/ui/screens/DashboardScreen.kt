@@ -1,7 +1,6 @@
 package com.example.adenmedicaltest.ui.screens
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,12 +15,12 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Book
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Timer
@@ -47,13 +46,11 @@ import androidx.compose.ui.unit.sp
 import com.example.adenmedicaltest.data.model.ExamResult
 import com.example.adenmedicaltest.data.model.Subject
 import com.example.adenmedicaltest.data.model.UserProfile
+import com.example.adenmedicaltest.data.repository.SavedExamDraft
 import com.example.adenmedicaltest.ui.theme.EmeraldSuccess
 import com.example.adenmedicaltest.ui.theme.IndigoDark
-import com.example.adenmedicaltest.ui.theme.IndigoLight
 import com.example.adenmedicaltest.ui.theme.IndigoPrimary
-import com.example.adenmedicaltest.ui.theme.Slate200
 import com.example.adenmedicaltest.ui.theme.Slate600
-import com.example.adenmedicaltest.ui.theme.Slate900
 
 @Composable
 fun DashboardScreen(
@@ -65,6 +62,10 @@ fun DashboardScreen(
     onOpenSyllabus: () -> Unit,
     onOpenResults: () -> Unit,
     onOpenAiTutor: () -> Unit = {},
+    onOpenAboutPrivacy: () -> Unit = {},
+    savedDraft: SavedExamDraft? = null,
+    onResumeDraft: () -> Unit = {},
+    onDiscardDraft: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val totalQuestions = subjects.sumOf { it.totalQuestionCount }
@@ -111,7 +112,7 @@ fun DashboardScreen(
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = "تدرّب على $totalQuestions سؤالاً شاملاً موزعة على المواد ونماذج السنوات السابقة.",
+                            text = "تدرّب على $totalQuestions سؤالاً شاملاً موزعة على المواد ونماذج السنوات السابقة مع التصحيح العلمي الفوري.",
                             color = Color(0xFFE0E7FF),
                             fontSize = 13.sp,
                             lineHeight = 18.sp
@@ -178,6 +179,58 @@ fun DashboardScreen(
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text("المعلم الذكي", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Unfinished Exam Draft Recovery Card (Prevents losing student progress on app close)
+        if (savedDraft != null) {
+            item {
+                val draftSubjectName = subjects.find { it.id == savedDraft.subjectId }?.name ?: "الاختبار"
+                Card(
+                    shape = RoundedCornerShape(18.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFF0FDF4)),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("resume_draft_card")
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text(
+                            text = "استئناف اختبار محفوظ تلقائياً ($draftSubjectName)",
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = Color(0xFF065F46)
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "تم حفظ تقدمك تلقائياً قبل إغلاق التطبيق (أجبت على ${savedDraft.answers.size} من ${savedDraft.questionIds.size} سؤالاً).",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Button(
+                                onClick = onResumeDraft,
+                                shape = RoundedCornerShape(10.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = EmeraldSuccess),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .testTag("btn_resume_draft")
+                            ) {
+                                Text("متابعة الاختبار", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            }
+                            OutlinedButton(
+                                onClick = onDiscardDraft,
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .testTag("btn_discard_draft")
+                            ) {
+                                Text("تجاهل المحاولة", fontWeight = FontWeight.Bold, fontSize = 12.sp)
                             }
                         }
                     }
@@ -396,6 +449,32 @@ fun DashboardScreen(
                         }
                     }
                 }
+            }
+        }
+
+        // App Info & Privacy Policy Card Footer
+        item {
+            OutlinedButton(
+                onClick = onOpenAboutPrivacy,
+                shape = RoundedCornerShape(14.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(46.dp)
+                    .testTag("btn_dashboard_about_privacy")
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Info,
+                    contentDescription = null,
+                    tint = IndigoPrimary,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "معلومات التطبيق وسياسة الخصوصية",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = IndigoPrimary
+                )
             }
         }
     }

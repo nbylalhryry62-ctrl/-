@@ -690,7 +690,7 @@ fun AiTutorScreen(
                             selectedIdx = practiceSelectedAnswers[index],
                             isQuizSubmitted = isPracticeSubmitted,
                             onSelectOption = { optIdx ->
-                                if (!isPracticeSubmitted) {
+                                if (!isPracticeSubmitted && !practiceSelectedAnswers.containsKey(index)) {
                                     practiceSelectedAnswers[index] = optIdx
                                 }
                             }

@@ -359,7 +359,7 @@ fun ExamScreen(
                                         .clip(RoundedCornerShape(14.dp))
                                         .border(2.dp, borderColor, RoundedCornerShape(14.dp))
                                         .background(bgColor)
-                                        .clickable {
+                                        .clickable(enabled = !hasAnsweredCurrent) {
                                             onAnswer(currentQuestion.id, option.key)
                                             onExplainSelection(currentQuestion, option.key)
                                         }
@@ -479,16 +479,25 @@ fun ExamScreen(
                                             tint = if (isCurrentAnswerCorrect) EmeraldSuccess else RoseError,
                                             modifier = Modifier.size(22.dp)
                                         )
-                                        Text(
-                                            text = if (isCurrentAnswerCorrect) {
-                                                "إجابة صحيحة! أحسنت الاختيار"
-                                            } else {
-                                                "إجابة خاطئة — تعرّف على التصحيح الصحيح"
-                                            },
-                                            fontSize = 15.sp,
-                                            fontWeight = FontWeight.ExtraBold,
-                                            color = if (isCurrentAnswerCorrect) Color(0xFF065F46) else Color(0xFF9F1239)
-                                        )
+                                        Column {
+                                            Text(
+                                                text = if (isCurrentAnswerCorrect) {
+                                                    "إجابة صحيحة! أحسنت الاختيار"
+                                                } else {
+                                                    "إجابة خاطئة — تعرّف على التصحيح الصحيح"
+                                                },
+                                                fontSize = 15.sp,
+                                                fontWeight = FontWeight.ExtraBold,
+                                                color = if (isCurrentAnswerCorrect) Color(0xFF065F46) else Color(0xFF9F1239)
+                                            )
+                                            Text(
+                                                text = "تم اعتماد إجابتك لهذا السؤال ولا يمكن تغييرها",
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.SemiBold,
+                                                color = Slate600,
+                                                modifier = Modifier.testTag("answer_locked_notice")
+                                            )
+                                        }
                                     }
 
                                     Spacer(modifier = Modifier.height(10.dp))

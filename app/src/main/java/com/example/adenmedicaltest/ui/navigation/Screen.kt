@@ -7,6 +7,7 @@ sealed class Screen(val route: String) {
     data object AiTutor : Screen("ai_tutor")
     data object Profile : Screen("profile")
     data object Admin : Screen("admin")
+    data object AboutPrivacy : Screen("about_privacy")
 
     data class SubjectLevels(val subjectId: String) : Screen("levels/$subjectId")
     data class Exam(val subjectId: String, val level: String) : Screen("exam/$subjectId/$level")

@@ -15,6 +15,7 @@ import androidx.compose.material.icons.filled.AdminPanelSettings
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Book
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material3.Badge
@@ -160,6 +161,17 @@ fun AppTopBar(
                             tint = if (currentScreen is Screen.Admin) IndigoPrimary else MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
+                }
+
+                IconButton(
+                    onClick = { onNavigate(Screen.AboutPrivacy) },
+                    modifier = Modifier.testTag("nav_about_privacy")
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Info,
+                        contentDescription = "معلومات التطبيق وسياسة الخصوصية",
+                        tint = if (currentScreen is Screen.AboutPrivacy) IndigoPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
 
                 IconButton(

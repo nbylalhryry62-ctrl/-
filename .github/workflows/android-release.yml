@@ -1,0 +1,162 @@
+name: Android Release Build (APK & AAB)
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Tag name for GitHub Release (e.g., v1.0.0)"
+        required: false
+        default: "v1.0.0"
+
+concurrency:
+  group: android-release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    name: Build, Verify & Publish Aden Medical Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: "temurin"
+          java-version: "21"
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Validate Project Structure & Question Bank
+        run: |
+          test -f settings.gradle.kts
+          test -f app/build.gradle.kts
+          test -f app/src/main/AndroidManifest.xml
+          test -f app/src/main/assets/question_bank.json
+          test -f app/src/main/assets/syllabus_data.json
+          python3 -c '
+          import json
+          with open("app/src/main/assets/question_bank.json") as f:
+              data = json.load(f)
+          total = sum(len(v) for v in data.values())
+          print(f"Verified question_bank.json with {total} total questions across {list(data.keys())}")
+          assert total > 1000, "Question bank count unexpectedly low"
+          '
+
+      - name: Prepare Signing Keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "Decoding custom release keystore from GitHub Secrets..."
+            echo "$KEYSTORE_BASE64" | base64 --decode > debug.keystore
+          elif [ ! -f "debug.keystore" ]; then
+            echo "Generating release signing keystore..."
+            keytool -genkeypair -v \
+              -keystore debug.keystore \
+              -storepass android \
+              -alias androiddebugkey \
+              -keypass android \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -dname "CN=Aden Medical Test, OU=Faculty of Medicine, O=University of Aden, L=Aden, S=Aden, C=YE"
+          fi
+
+      - name: Run Unit & Robolectric Verification Tests
+        run: gradle :app:testDebugUnitTest --tests "com.example.adenmedicaltest.ExamAppVerificationTest"
+
+      - name: Build Signed Release APK & AAB
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD || 'android' }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS || 'androiddebugkey' }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD || 'android' }}
+        run: |
+          gradle :app:assembleRelease :app:bundleRelease \
+            -Pandroid.injected.signing.store.file="$(pwd)/debug.keystore" \
+            -Pandroid.injected.signing.store.password="$KEYSTORE_PASSWORD" \
+            -Pandroid.injected.signing.key.alias="$KEY_ALIAS" \
+            -Pandroid.injected.signing.key.password="$KEY_PASSWORD"
+
+      - name: Verify APK Signature, Package Metadata & Generate SHA256SUMS
+        run: |
+          mkdir -p release-dist
+          APK_PATH=$(find app/build/outputs/apk/release -name "*.apk" | head -n 1)
+          AAB_PATH=$(find app/build/outputs/bundle/release -name "*.aab" | head -n 1)
+
+          if [ -z "$APK_PATH" ] || [ ! -f "$APK_PATH" ]; then
+            echo "ERROR: Release APK not found!"
+            exit 1
+          fi
+
+          cp "$APK_PATH" release-dist/aden-medical-test-v1.0.0-release.apk
+          if [ -n "$AAB_PATH" ] && [ -f "$AAB_PATH" ]; then
+            cp "$AAB_PATH" release-dist/aden-medical-test-v1.0.0-release.aab
+          fi
+
+          SDK_DIR="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
+          BUILD_TOOLS_DIR=$(ls -d "$SDK_DIR"/build-tools/* | sort -V | tail -n 1)
+          "$BUILD_TOOLS_DIR/apksigner" verify --verbose --print-certs release-dist/aden-medical-test-v1.0.0-release.apk
+          "$BUILD_TOOLS_DIR/aapt" dump badging release-dist/aden-medical-test-v1.0.0-release.apk | grep -E "package:|sdkVersion:|targetSdkVersion:|application-label:"
+
+          cd release-dist
+          sha256sum * > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+          ls -lh
+
+      - name: Upload Release Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: aden-medical-test-v1.0.0-release
+          path: |
+            release-dist/aden-medical-test-v1.0.0-release.apk
+            release-dist/aden-medical-test-v1.0.0-release.aab
+            release-dist/SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.release_tag || github.ref_name }}
+          name: "Aden Medical Test ${{ github.event.inputs.release_tag || github.ref_name }} — تطبيق اختبار القبول الطبي بجامعة عدن"
+          body: |
+            ## 🎓 Aden Medical Test — بوابة اختبار القبول الطبي بجامعة عدن (الإصدار 1.0.0)
+
+            ### أبرز المميزات في هذا الإصدار:
+            - **واجهة عربية كاملة (RTL)** بتصميم Material Design 3 متوافق مع أجهزة Android.
+            - **بنك أسئلة شامل ومعتمد (1,142 سؤالاً)**:
+              - الأحياء: 179 سؤالاً
+              - الكيمياء: 525 سؤالاً
+              - اللغة الإنجليزية: 438 سؤالاً
+            - **تصحيح فوري وتفسير علمي مختصر**: إظهار الإجابة الصحيحة والتعليل العلمي فور اختيار الإجابة، مع قفل إجابة السؤال بعد اعتمادها.
+            - **مؤقت زمني للاختبار الكامل** مع التسليم التلقائي عند انتهاء الوقت.
+            - **دعم العمل الكامل دون اتصال بالإنترنت (Offline Mode)** وحفظ النتائج والتقدم تلقائياً محلياً وسحابياً.
+            - **شاشة معلومات التطبيق وسياسة الخصوصية**.
+
+            ### ملفات التحميل المرفقة:
+            - `aden-medical-test-v1.0.0-release.apk`: ملف التثبيت المباشر لأجهزة Android.
+            - `aden-medical-test-v1.0.0-release.aab`: حزمة Android App Bundle المخصصة للنشر.
+            - `SHA256SUMS.txt`: بصمات التحقق الرقمية SHA-256 للملفات.
+          files: |
+            release-dist/aden-medical-test-v1.0.0-release.apk
+            release-dist/aden-medical-test-v1.0.0-release.aab
+            release-dist/SHA256SUMS.txt
+          draft: false
+          prerelease: false

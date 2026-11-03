@@ -12,6 +12,7 @@ import com.example.adenmedicaltest.data.model.SyllabusData
 import com.example.adenmedicaltest.data.model.UserProfile
 import com.example.adenmedicaltest.data.repository.AuthRepository
 import com.example.adenmedicaltest.data.repository.ExamRepository
+import com.example.adenmedicaltest.data.repository.SavedExamDraft
 import com.example.adenmedicaltest.data.repository.SyllabusRepository
 import com.example.adenmedicaltest.ui.navigation.Screen
 import kotlinx.coroutines.Job
@@ -21,6 +22,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -84,57 +86,56 @@ class MainViewModel(
 
     val subjects: List<Subject> = examRepository.subjects
 
-    val currentUser: StateFlow<UserProfile?> = authRepository.observeUserProfile(currentUserId)
-        .catch { error ->
-            Log.w(TAG, "Error observing user profile", error)
-            emit(
-                UserProfile(
-                    id = currentUserId,
-                    userId = currentUserId,
-                    email = currentUserEmail,
-                    username = currentUserEmail.substringBefore("@").ifBlank { "student" },
-                    fullName = currentUserDisplayName ?: "طالب كلية الطب",
-                    role = "student"
-                )
-            )
-        }
-        .stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS),
-            initialValue = UserProfile(
-                id = currentUserId,
-                userId = currentUserId,
-                email = currentUserEmail,
-                username = currentUserEmail.substringBefore("@").ifBlank { "student" },
-                fullName = currentUserDisplayName ?: "طالب كلية الطب",
-                role = "student"
-            )
-        )
+    private val defaultProfile = UserProfile(
+        id = currentUserId,
+        userId = currentUserId,
+        email = currentUserEmail,
+        username = currentUserEmail.substringBefore("@").ifBlank { "طالب الطب" },
+        fullName = currentUserDisplayName ?: "طالب كلية الطب",
+        role = "student"
+    )
 
-    // Two-tier Flow error handling for Firestore snapshot stream
+    val currentUser: StateFlow<UserProfile?> = (
+        if (currentUserId == ExamRepository.LOCAL_OFFLINE_USER_ID) {
+            flowOf(defaultProfile)
+        } else {
+            authRepository.observeUserProfile(currentUserId)
+                .catch { error ->
+                    Log.w(TAG, "Error observing user profile", error)
+                    emit(defaultProfile)
+                }
+        }
+    ).stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS),
+        initialValue = defaultProfile
+    )
+
+    // Two-tier Flow error handling for Firestore snapshot stream with local fallback
     val resultsState: StateFlow<UiState<List<ExamResult>>> = examRepository.observeResults(currentUserId)
         .map<List<ExamResult>, UiState<List<ExamResult>>> { UiState.Success(it) }
         .catch { error ->
-            Log.w(TAG, "Error observing exam results", error)
-            emit(UiState.Error(error.message ?: "تعذر تحميل سجل النتائج"))
+            Log.w(TAG, "Error observing exam results, falling back to local storage", error)
+            val localFallback = examRepository.getLocalResults(currentUserId)
+            emit(UiState.Success(localFallback))
         }
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS),
-            initialValue = UiState.Loading
+            initialValue = UiState.Success(examRepository.getLocalResults(currentUserId))
         )
 
     val results: StateFlow<List<ExamResult>> = resultsState
         .map { state ->
             when (state) {
                 is UiState.Success -> state.data
-                else -> emptyList()
+                else -> examRepository.getLocalResults(currentUserId)
             }
         }
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS),
-            initialValue = emptyList()
+            initialValue = examRepository.getLocalResults(currentUserId)
         )
 
     private val _currentScreen = MutableStateFlow<Screen>(Screen.Dashboard)
@@ -142,6 +143,9 @@ class MainViewModel(
 
     private val _activeExam = MutableStateFlow<ActiveExamState?>(null)
     val activeExam: StateFlow<ActiveExamState?> = _activeExam.asStateFlow()
+
+    private val _savedDraft = MutableStateFlow<SavedExamDraft?>(null)
+    val savedDraft: StateFlow<SavedExamDraft?> = _savedDraft.asStateFlow()
 
     private val _lastResult = MutableStateFlow<ExamResult?>(null)
     val lastResult: StateFlow<ExamResult?> = _lastResult.asStateFlow()
@@ -167,9 +171,11 @@ class MainViewModel(
     init {
         loadSyllabus()
         ensureProfileInitialized()
+        _savedDraft.value = examRepository.loadActiveExamDraft(currentUserId)
     }
 
     private fun ensureProfileInitialized() {
+        if (currentUserId == ExamRepository.LOCAL_OFFLINE_USER_ID) return
         viewModelScope.launch {
             authRepository.ensureUserProfile(
                 userId = currentUserId,
@@ -196,10 +202,73 @@ class MainViewModel(
         _currentScreen.value = screen
     }
 
+    fun openResultReview(result: ExamResult) {
+        _wasAutoSubmittedOnTimeout.value = false
+        _lastResult.value = result
+        _currentScreen.value = Screen.Result(result)
+    }
+
     fun cancelExam() {
         timerJob?.cancel()
         _activeExam.value = null
+        examRepository.saveActiveExamDraft(currentUserId, null)
+        _savedDraft.value = null
         _currentScreen.value = Screen.Dashboard
+    }
+
+    fun discardSavedDraft() {
+        examRepository.saveActiveExamDraft(currentUserId, null)
+        _savedDraft.value = null
+    }
+
+    fun resumeSavedDraft() {
+        val draft = _savedDraft.value ?: return
+        val subject = subjects.find { it.id == draft.subjectId } ?: subjects.first()
+        viewModelScope.launch {
+            val allQuestions = examRepository.getQuestionsForSubject(draft.subjectId)
+            val byId = allQuestions.associateBy { it.id }
+            val restoredQuestions = draft.questionIds.mapNotNull { byId[it] }
+            if (restoredQuestions.isEmpty()) {
+                discardSavedDraft()
+                return@launch
+            }
+            _wasAutoSubmittedOnTimeout.value = false
+            val state = ActiveExamState(
+                subject = subject,
+                level = draft.level,
+                questions = restoredQuestions,
+                currentIndex = draft.currentIndex.coerceIn(0, restoredQuestions.size - 1),
+                answers = draft.answers,
+                totalDurationSeconds = draft.totalDurationSeconds,
+                secondsRemaining = draft.secondsRemaining,
+                isTimerRunning = true,
+                isSubmitted = false
+            )
+            _activeExam.value = state
+            val alreadyElapsed = (draft.totalDurationSeconds - draft.secondsRemaining).coerceAtLeast(0)
+            examStartTime = System.currentTimeMillis() - (alreadyElapsed * 1000L)
+            _currentScreen.value = Screen.Exam(subject.id, draft.level)
+            startTimer()
+        }
+    }
+
+    private fun persistDraft(state: ActiveExamState?) {
+        if (state == null || state.isSubmitted || state.questions.isEmpty()) {
+            examRepository.saveActiveExamDraft(currentUserId, null)
+            _savedDraft.value = null
+            return
+        }
+        val draft = SavedExamDraft(
+            subjectId = state.subject.id,
+            level = state.level,
+            questionIds = state.questions.map { it.id },
+            currentIndex = state.currentIndex,
+            answers = state.answers,
+            totalDurationSeconds = state.totalDurationSeconds,
+            secondsRemaining = state.secondsRemaining
+        )
+        examRepository.saveActiveExamDraft(currentUserId, draft)
+        _savedDraft.value = draft
     }
 
     fun openSubjectLevels(subjectId: String) {
@@ -235,7 +304,7 @@ class MainViewModel(
             }
 
             _wasAutoSubmittedOnTimeout.value = false
-            _activeExam.value = ActiveExamState(
+            val newState = ActiveExamState(
                 subject = subject,
                 level = level,
                 questions = shuffledQuestions,
@@ -246,6 +315,8 @@ class MainViewModel(
                 isTimerRunning = true,
                 isSubmitted = false
             )
+            _activeExam.value = newState
+            persistDraft(newState)
             examStartTime = System.currentTimeMillis()
             _currentScreen.value = Screen.Exam(subjectId, level)
             startTimer()
@@ -269,7 +340,11 @@ class MainViewModel(
                     submitExam(autoSubmittedByTimer = true)
                     break
                 } else {
-                    _activeExam.value = current.copy(secondsRemaining = remaining)
+                    val updated = current.copy(secondsRemaining = remaining)
+                    _activeExam.value = updated
+                    if (remaining % 5 == 0) {
+                        persistDraft(updated)
+                    }
                 }
             }
         }
@@ -278,22 +353,30 @@ class MainViewModel(
     fun answerQuestion(questionId: String, selectedKey: String) {
         val current = _activeExam.value ?: return
         if (current.isSubmitted) return
+        // Lock answer once selected: prevent changing the answer after immediate correction is shown
+        if (current.answers.containsKey(questionId)) return
         val updatedAnswers = current.answers.toMutableMap()
         updatedAnswers[questionId] = selectedKey
-        _activeExam.value = current.copy(answers = updatedAnswers)
+        val nextState = current.copy(answers = updatedAnswers)
+        _activeExam.value = nextState
+        persistDraft(nextState)
     }
 
     fun nextQuestion() {
         val current = _activeExam.value ?: return
         if (current.currentIndex < current.questions.size - 1) {
-            _activeExam.value = current.copy(currentIndex = current.currentIndex + 1)
+            val nextState = current.copy(currentIndex = current.currentIndex + 1)
+            _activeExam.value = nextState
+            persistDraft(nextState)
         }
     }
 
     fun prevQuestion() {
         val current = _activeExam.value ?: return
         if (current.currentIndex > 0) {
-            _activeExam.value = current.copy(currentIndex = current.currentIndex - 1)
+            val prevState = current.copy(currentIndex = current.currentIndex - 1)
+            _activeExam.value = prevState
+            persistDraft(prevState)
         }
     }
 
@@ -342,11 +425,13 @@ class MainViewModel(
             answers = answersDetails
         )
 
-        _activeExam.value = current.copy(
+        val submittedState = current.copy(
             secondsRemaining = if (autoSubmittedByTimer) 0 else current.secondsRemaining,
             isTimerRunning = false,
             isSubmitted = true
         )
+        _activeExam.value = submittedState
+        persistDraft(null)
         _lastResult.value = result
         _currentScreen.value = Screen.Result(result)
 
@@ -355,8 +440,9 @@ class MainViewModel(
             saved.onSuccess { docId ->
                 val updated = result.copy(id = docId)
                 _lastResult.value = updated
-            }.onFailure { err ->
-                _errorBanner.value = err.localizedMessage ?: "تعذر حفظ النتيجة في قاعدة البيانات السحابية"
+            }.onFailure {
+                // Result is already persisted locally on device by ExamRepository.saveResult()
+                _errorBanner.value = "تم حفظ النتيجة محلياً على جهازك (تعذرت المزامنة السحابية حالياً)"
             }
         }
     }
@@ -368,13 +454,14 @@ class MainViewModel(
 
     fun deleteResult(id: String) {
         viewModelScope.launch {
-            examRepository.deleteResult(id).onFailure { err ->
+            examRepository.deleteResult(id, currentUserId).onFailure { err ->
                 _errorBanner.value = err.localizedMessage ?: "تعذر حذف النتيجة"
             }
         }
     }
 
     fun updateProfileFullName(fullName: String) {
+        if (currentUserId == ExamRepository.LOCAL_OFFLINE_USER_ID) return
         viewModelScope.launch {
             authRepository.updateFullName(fullName).onFailure { err ->
                 _errorBanner.value = err.localizedMessage ?: "تعذر تحديث الاسم الكامل"
