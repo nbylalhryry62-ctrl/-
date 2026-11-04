@@ -5,20 +5,29 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.adenmedicaltest.data.model.ExamAnswer
 import com.example.adenmedicaltest.data.model.Question
+import com.example.adenmedicaltest.ui.auth.ensureAppCheckTokenReady
+import com.example.adenmedicaltest.ui.auth.sanitizeLogMessage
 import com.google.firebase.Firebase
+import com.google.firebase.ai.GenerativeModel
 import com.google.firebase.ai.ai
 import com.google.firebase.ai.type.Schema
 import com.google.firebase.ai.type.generationConfig
+import java.io.IOException
+import java.net.SocketTimeoutException
+import java.net.UnknownHostException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 import org.json.JSONObject
 
 private const val TAG = "AiTutorViewModel"
+private const val GEMINI_MODEL_NAME = "gemini-3.8-flash"
 
 sealed interface AiUiState {
     data object Idle : AiUiState
@@ -46,11 +55,57 @@ sealed interface QuizGenUiState {
     data class Error(val message: String) : QuizGenUiState
 }
 
-class AiTutorViewModel : ViewModel() {
+/**
+ * Determines whether an exception thrown by Firebase AI Logic is caused by an invalid or expired
+ * Firebase App Check token so that a forced App Check token refresh and retry can be performed.
+ */
+fun isAppCheckInvalidException(error: Throwable): Boolean {
+    val combinedMessage = buildString {
+        append(error.message.orEmpty())
+        error.cause?.message?.let {
+            append(" | ")
+            append(it)
+        }
+    }.lowercase()
 
-    // Lazy initialization of general-use Gemini 3.8 Flash model
-    private val tutorModel by lazy {
-        Firebase.ai.generativeModel("gemini-3.8-flash")
+    return combinedMessage.contains("app check") ||
+        combinedMessage.contains("appcheck") ||
+        combinedMessage.contains("token is invalid") ||
+        combinedMessage.contains("unauthenticated") ||
+        combinedMessage.contains("permission_denied") ||
+        combinedMessage.contains("403")
+}
+
+/**
+ * Maps technical exceptions to clear, user-friendly Arabic error messages without leaking secrets.
+ */
+fun formatUserFacingAiError(error: Throwable, fallbackMessage: String): String {
+    return when {
+        error is TimeoutCancellationException || error is SocketTimeoutException ->
+            "انتهت مهلة الاتصال بخدمة الذكاء الاصطناعي (60 ثانية). يرجى التحقق من سرعة الإنترنت والمحاولة مجدداً."
+
+        isAppCheckInvalidException(error) ->
+            "تعذر التحقق من رمز حماية التطبيق (Firebase App Check). تم تحديث جلسة الحماية تلقائياً؛ يرجى الضغط على «إعادة المحاولة»، أو التأكد من تسجيل رمز التطوير (Debug Token) في إعدادات Firebase App Check."
+
+        error is UnknownHostException || error is IOException ||
+            error.message?.contains("network", ignoreCase = true) == true ||
+            error.message?.contains("Unable to resolve host", ignoreCase = true) == true ->
+            "تعذر الاتصال بخدمة الذكاء الاصطناعي (Gemini). يرجى التحقق من اتصال الإنترنت ثم إعادة المحاولة."
+
+        else -> fallbackMessage
+    }
+}
+
+class AiTutorViewModel(
+    private val structuredQuizGenerator: (suspend (String) -> String?)? = null,
+    private val tutorStreamGenerator: ((String) -> Flow<String>)? = null,
+    private val tokenRefresher: suspend (Boolean) -> Boolean = { force ->
+        ensureAppCheckTokenReady(forceRefresh = force)
+    }
+) : ViewModel() {
+
+    private fun createTutorModel(): GenerativeModel {
+        return Firebase.ai.generativeModel(GEMINI_MODEL_NAME)
     }
 
     // Structured JSON schema using Schema.obj (not Schema.object)
@@ -77,13 +132,38 @@ class AiTutorViewModel : ViewModel() {
         )
     }
 
-    private val structuredQuizModel by lazy {
-        Firebase.ai.generativeModel(
-            modelName = "gemini-3.8-flash",
+    private fun createStructuredQuizModel(): GenerativeModel {
+        return Firebase.ai.generativeModel(
+            modelName = GEMINI_MODEL_NAME,
             generationConfig = generationConfig {
                 responseMimeType = "application/json"
                 responseSchema = practiceQuizSchema
             }
+        )
+    }
+
+    private suspend fun invokeStructuredQuizModel(prompt: String): String? {
+        val customGen = structuredQuizGenerator
+        if (customGen != null) {
+            return customGen(prompt)
+        }
+        return createStructuredQuizModel().generateContent(prompt).text
+    }
+
+    private fun invokeTutorStreamModel(prompt: String): Flow<String> {
+        val customStream = tutorStreamGenerator
+        if (customStream != null) {
+            return customStream(prompt)
+        }
+        return createTutorModel().generateContentStream(prompt).map { it.text.orEmpty() }
+    }
+
+    private fun logSanitizedError(operation: String, error: Throwable) {
+        val safeMsg = sanitizeLogMessage(error.message)
+        val safeCause = error.cause?.let { "${it.javaClass.simpleName}: ${sanitizeLogMessage(it.message)}" } ?: "none"
+        Log.e(
+            TAG,
+            "AI operation [$operation] failed | type=${error.javaClass.simpleName} | message=$safeMsg | cause=$safeCause"
         )
     }
 
@@ -103,6 +183,40 @@ class AiTutorViewModel : ViewModel() {
     private val _hintMap = MutableStateFlow<Map<String, AiUiState>>(emptyMap())
     val hintMap: StateFlow<Map<String, AiUiState>> = _hintMap.asStateFlow()
 
+    private suspend fun collectStreamWithAppCheckRetry(
+        operationName: String,
+        prompt: String,
+        onChunk: (String) -> Unit
+    ) {
+        tokenRefresher(false)
+        try {
+            withTimeout(60_000L) {
+                invokeTutorStreamModel(prompt).collect { chunkText ->
+                    onChunk(chunkText)
+                }
+            }
+        } catch (firstError: Exception) {
+            if (firstError is CancellationException && firstError !is TimeoutCancellationException) {
+                throw firstError
+            }
+            if (isAppCheckInvalidException(firstError)) {
+                Log.w(
+                    TAG,
+                    "App Check token rejected during [$operationName] (${firstError.javaClass.simpleName}). " +
+                        "Refreshing App Check token and retrying once..."
+                )
+                tokenRefresher(true)
+                withTimeout(60_000L) {
+                    invokeTutorStreamModel(prompt).collect { chunkText ->
+                        onChunk(chunkText)
+                    }
+                }
+            } else {
+                throw firstError
+            }
+        }
+    }
+
     fun askMedicalTutorStream(userQuestion: String, selectedSubject: String = "عام") {
         if (userQuestion.isBlank()) return
         viewModelScope.launch {
@@ -118,12 +232,12 @@ class AiTutorViewModel : ViewModel() {
             """.trimIndent()
 
             try {
-                withTimeout(60_000L) {
-                    tutorModel.generateContentStream(prompt).collect { chunk ->
-                        val chunkText = chunk.text.orEmpty()
-                        accumulatedText.append(chunkText)
-                        _tutorState.value = AiUiState.Streaming(accumulatedText.toString())
-                    }
+                collectStreamWithAppCheckRetry(
+                    operationName = "askMedicalTutorStream",
+                    prompt = prompt
+                ) { chunkText ->
+                    accumulatedText.append(chunkText)
+                    _tutorState.value = AiUiState.Streaming(accumulatedText.toString())
                 }
                 if (accumulatedText.isNotBlank()) {
                     _tutorState.value = AiUiState.Success(accumulatedText.toString())
@@ -131,13 +245,15 @@ class AiTutorViewModel : ViewModel() {
                     _tutorState.value = AiUiState.Error("لم يُرجع النموذج أي إجابة. يرجى المحاولة مرة أخرى.")
                 }
             } catch (e: TimeoutCancellationException) {
-                Log.e(TAG, "Tutor streaming timed out", e)
-                _tutorState.value = AiUiState.Error("انتهت مهلة الاتصال بعد 60 ثانية. يرجى المحاولة مجدداً.")
+                logSanitizedError("askMedicalTutorStream", e)
+                _tutorState.value = AiUiState.Error(formatUserFacingAiError(e, "انتهت مهلة الاتصال بعد 60 ثانية."))
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                Log.e(TAG, "Tutor streaming generation failed", e)
-                _tutorState.value = AiUiState.Error(e.localizedMessage ?: "فشل توليد الإجابة من المساعد الذكي.")
+                logSanitizedError("askMedicalTutorStream", e)
+                _tutorState.value = AiUiState.Error(
+                    formatUserFacingAiError(e, "تعذر توليد الإجابة من المساعد الذكي. يرجى المحاولة مرة أخرى.")
+                )
             }
         }
     }
@@ -153,10 +269,32 @@ class AiTutorViewModel : ViewModel() {
             """.trimIndent()
 
             try {
-                val response = withTimeout(60_000L) {
-                    structuredQuizModel.generateContent(prompt)
-                }
-                val jsonString = response.text ?: throw IllegalStateException("Model returned empty JSON text.")
+                // Ensure App Check provider and token are ready before calling Gemini
+                tokenRefresher(false)
+
+                val jsonString = try {
+                    withTimeout(60_000L) {
+                        invokeStructuredQuizModel(prompt)
+                    }
+                } catch (firstError: Exception) {
+                    if (firstError is CancellationException && firstError !is TimeoutCancellationException) {
+                        throw firstError
+                    }
+                    if (isAppCheckInvalidException(firstError)) {
+                        Log.w(
+                            TAG,
+                            "App Check token rejected during [generatePracticeQuiz] (${firstError.javaClass.simpleName}). " +
+                                "Forcing App Check token refresh and retrying once..."
+                        )
+                        // Force-refresh App Check token and clear stale cached token
+                        tokenRefresher(true)
+                        withTimeout(60_000L) {
+                            invokeStructuredQuizModel(prompt)
+                        }
+                    } else {
+                        throw firstError
+                    }
+                } ?: throw IllegalStateException("Model returned empty JSON text.")
 
                 // Parse directly without regex or markdown code-fence stripping
                 val json = JSONObject(jsonString)
@@ -170,7 +308,8 @@ class AiTutorViewModel : ViewModel() {
                     AiGeneratedQuestion(
                         question = qObj.getString("question"),
                         options = opts,
-                        correctOptionIndex = qObj.optInt("correctOptionIndex", 0).coerceIn(0, (opts.size - 1).coerceAtLeast(0)),
+                        correctOptionIndex = qObj.optInt("correctOptionIndex", 0)
+                            .coerceIn(0, (opts.size - 1).coerceAtLeast(0)),
                         explanation = qObj.getString("explanation")
                     )
                 }
@@ -181,13 +320,17 @@ class AiTutorViewModel : ViewModel() {
                     questions = parsedQuestions
                 )
             } catch (e: TimeoutCancellationException) {
-                Log.e(TAG, "Structured quiz generation timed out", e)
-                _quizGenState.value = QuizGenUiState.Error("انتهت مهلة توليد الاختبار التدريبي بعد 60 ثانية.")
+                logSanitizedError("generatePracticeQuiz", e)
+                _quizGenState.value = QuizGenUiState.Error(
+                    formatUserFacingAiError(e, "انتهت مهلة توليد الاختبار التدريبي بعد 60 ثانية.")
+                )
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                Log.e(TAG, "Failed to generate or parse structured quiz JSON", e)
-                _quizGenState.value = QuizGenUiState.Error(e.localizedMessage ?: "تعذر توليد الأسئلة التدريبية.")
+                logSanitizedError("generatePracticeQuiz", e)
+                _quizGenState.value = QuizGenUiState.Error(
+                    formatUserFacingAiError(e, "تعذر توليد الملخص والأسئلة التدريبية حالياً. يرجى المحاولة مرة أخرى.")
+                )
             }
         }
     }
@@ -228,11 +371,12 @@ class AiTutorViewModel : ViewModel() {
             """.trimIndent()
 
             try {
-                withTimeout(60_000L) {
-                    tutorModel.generateContentStream(prompt).collect { chunk ->
-                        accumulated.append(chunk.text.orEmpty())
-                        _explanationMap.value = _explanationMap.value + (key to AiUiState.Streaming(accumulated.toString()))
-                    }
+                collectStreamWithAppCheckRetry(
+                    operationName = "explainAnswerStream",
+                    prompt = prompt
+                ) { chunkText ->
+                    accumulated.append(chunkText)
+                    _explanationMap.value = _explanationMap.value + (key to AiUiState.Streaming(accumulated.toString()))
                 }
                 if (accumulated.isNotBlank()) {
                     _explanationMap.value = _explanationMap.value + (key to AiUiState.Success(accumulated.toString()))
@@ -240,13 +384,17 @@ class AiTutorViewModel : ViewModel() {
                     _explanationMap.value = _explanationMap.value + (key to AiUiState.Error("لم يتم استلام شرح إضافي من النموذج."))
                 }
             } catch (e: TimeoutCancellationException) {
-                Log.e(TAG, "Explanation timed out", e)
-                _explanationMap.value = _explanationMap.value + (key to AiUiState.Error("انتهت مهلة طلب الشرح الإضافي."))
+                logSanitizedError("explainAnswerStream", e)
+                _explanationMap.value = _explanationMap.value + (key to AiUiState.Error(
+                    formatUserFacingAiError(e, "انتهت مهلة طلب الشرح الإضافي.")
+                ))
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                Log.e(TAG, "Explanation generation failed", e)
-                _explanationMap.value = _explanationMap.value + (key to AiUiState.Error(e.localizedMessage ?: "تعذر جلب الشرح الذكي الإضافي."))
+                logSanitizedError("explainAnswerStream", e)
+                _explanationMap.value = _explanationMap.value + (key to AiUiState.Error(
+                    formatUserFacingAiError(e, "تعذر جلب الشرح الذكي الإضافي.")
+                ))
             }
         }
     }
@@ -265,11 +413,12 @@ class AiTutorViewModel : ViewModel() {
             """.trimIndent()
 
             try {
-                withTimeout(60_000L) {
-                    tutorModel.generateContentStream(prompt).collect { chunk ->
-                        accumulated.append(chunk.text.orEmpty())
-                        _hintMap.value = _hintMap.value + (key to AiUiState.Streaming(accumulated.toString()))
-                    }
+                collectStreamWithAppCheckRetry(
+                    operationName = "requestQuestionHint",
+                    prompt = prompt
+                ) { chunkText ->
+                    accumulated.append(chunkText)
+                    _hintMap.value = _hintMap.value + (key to AiUiState.Streaming(accumulated.toString()))
                 }
                 if (accumulated.isNotBlank()) {
                     _hintMap.value = _hintMap.value + (key to AiUiState.Success(accumulated.toString()))
@@ -277,13 +426,17 @@ class AiTutorViewModel : ViewModel() {
                     _hintMap.value = _hintMap.value + (key to AiUiState.Error("لم يُرجع النموذج تلميحاً."))
                 }
             } catch (e: TimeoutCancellationException) {
-                Log.e(TAG, "Hint generation timed out", e)
-                _hintMap.value = _hintMap.value + (key to AiUiState.Error("انتهت مهلة التلميح بعد 60 ثانية."))
+                logSanitizedError("requestQuestionHint", e)
+                _hintMap.value = _hintMap.value + (key to AiUiState.Error(
+                    formatUserFacingAiError(e, "انتهت مهلة التلميح بعد 60 ثانية.")
+                ))
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                Log.e(TAG, "Hint generation failed", e)
-                _hintMap.value = _hintMap.value + (key to AiUiState.Error(e.localizedMessage ?: "تعذر جلب التلميح الذكي."))
+                logSanitizedError("requestQuestionHint", e)
+                _hintMap.value = _hintMap.value + (key to AiUiState.Error(
+                    formatUserFacingAiError(e, "تعذر جلب التلميح الذكي.")
+                ))
             }
         }
     }

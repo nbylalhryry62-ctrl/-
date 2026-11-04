@@ -427,7 +427,12 @@ fun AiTutorScreen(
                     }
 
                     is AiUiState.Error -> {
-                        AiErrorCard(message = state.message)
+                        AiErrorCard(
+                            message = state.message,
+                            onRetry = if (promptInput.isNotBlank()) {
+                                { aiViewModel.askMedicalTutorStream(promptInput, selectedSubject) }
+                            } else null
+                        )
                     }
                 }
             }
@@ -529,7 +534,12 @@ fun AiTutorScreen(
 
                 is QuizGenUiState.Error -> {
                     item {
-                        AiErrorCard(message = qState.message)
+                        AiErrorCard(
+                            message = qState.message,
+                            onRetry = if (topicInput.isNotBlank()) {
+                                { aiViewModel.generatePracticeQuiz(topicInput, selectedSubject) }
+                            } else null
+                        )
                     }
                 }
 
@@ -754,7 +764,10 @@ private fun AiResponseCard(
 }
 
 @Composable
-fun AiErrorCard(message: String) {
+fun AiErrorCard(
+    message: String,
+    onRetry: (() -> Unit)? = null
+) {
     Card(
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF1F2)),
@@ -762,22 +775,42 @@ fun AiErrorCard(message: String) {
             .fillMaxWidth()
             .testTag("ai_error_card")
     ) {
-        Row(
-            modifier = Modifier.padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            Icon(
-                imageVector = Icons.Default.ErrorOutline,
-                contentDescription = null,
-                tint = RoseError
-            )
-            Text(
-                text = message,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = RoseError
-            )
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.ErrorOutline,
+                    contentDescription = null,
+                    tint = RoseError
+                )
+                Text(
+                    text = message,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = RoseError,
+                    lineHeight = 20.sp,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+            if (onRetry != null) {
+                Spacer(modifier = Modifier.height(12.dp))
+                Button(
+                    onClick = onRetry,
+                    shape = RoundedCornerShape(10.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = RoseError,
+                        contentColor = Color.White
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(42.dp)
+                        .testTag("btn_retry_ai_request")
+                ) {
+                    Text("إعادة المحاولة", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                }
+            }
         }
     }
 }
