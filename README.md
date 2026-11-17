@@ -62,6 +62,16 @@ python3 -m http.server 8080   # ثم افتح http://localhost:8080
 - **GitHub Pages:** فعّل Pages من Settings ثم Pages واختر Source: GitHub Actions. يرفع `.github/workflows/pages.yml` مجلد `pwa-deploy` عند كل push إلى `main`.
 - **Netlify / Cloudflare Pages:** انشر مجلد `pwa-deploy` (الإعدادات في `netlify.toml`).
 
+## تطبيق أندرويد (APK)
+
+يغلّف `.github/workflows/android-apk.yml` تطبيق `pwa-deploy` في تطبيق أندرويد (Capacitor) ويبني ملف APK تلقائيًا:
+
+1. افتح تبويب **Actions** في GitHub، واختر **Build Android APK**، ثم **Run workflow** (يعمل أيضًا عند كل تعديل على التطبيق).
+2. بعد اكتمال التشغيل (نحو 5 دقائق) نزّل الملف `aden-admission-portal.apk` من قسم **Artifacts** أسفل صفحة التشغيل.
+3. انقله إلى الهاتف وثبّته (يتطلب السماح بالتثبيت من مصادر غير معروفة).
+
+الملف موقّع بمفتاح تجريبي (debug) ويصلح للتجربة والتوزيع المباشر. للنشر على Google Play يلزم توقيعه بمفتاحك الخاص (release keystore محفوظ في GitHub Secrets).
+
 ## تعديل البنك
 
 1. عدّل الأسئلة في `data/qbank_full_7654.json`.

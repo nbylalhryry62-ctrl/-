@@ -1,0 +1,7 @@
+{
+  "appId": "ye.edu.aden.admission",
+  "appName": "بوابة القبول",
+  "webDir": "www",
+  "server": { "androidScheme": "https" },
+  "android": { "allowMixedContent": false }
+}

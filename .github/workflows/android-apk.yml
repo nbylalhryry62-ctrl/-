@@ -1,0 +1,65 @@
+name: Build Android APK
+
+# Wraps pwa-deploy/ in an Android WebView app (Capacitor) and publishes a debug-signed APK
+# as a workflow artifact. Run it from the Actions tab, or it runs on every change to the web app.
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "pwa-deploy/**"
+      - "android-build/**"
+      - ".github/workflows/android-apk.yml"
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Create the Android project
+        run: |
+          mkdir -p build && cd build
+          cp ../android-build/capacitor.config.json .
+          cp -r ../pwa-deploy www
+          npm init -y >/dev/null
+          npm install --no-audit --no-fund @capacitor/core@6.2.1 @capacitor/cli@6.2.1 @capacitor/android@6.2.1
+          npx cap add android
+          npx cap sync android
+
+      - name: Launcher icon and splash colour
+        working-directory: build/android/app/src/main/res
+        run: |
+          src=../../../../../../pwa-deploy/icons
+          for d in mdpi:48:108 hdpi:72:162 xhdpi:96:216 xxhdpi:144:324 xxxhdpi:192:432; do
+            IFS=: read name legacy adaptive <<< "$d"
+            convert "$src/icon-512.png" -resize ${legacy}x${legacy} mipmap-$name/ic_launcher.png
+            convert "$src/icon-512.png" -resize ${legacy}x${legacy} mipmap-$name/ic_launcher_round.png
+            convert "$src/icon-maskable-512.png" -resize ${adaptive}x${adaptive} mipmap-$name/ic_launcher_foreground.png
+          done
+          sed -i 's/#FFFFFF/#0F2942/I' values/ic_launcher_background.xml
+
+      - name: Build debug APK
+        working-directory: build/android
+        run: ./gradlew --no-daemon assembleDebug
+
+      - name: Collect APK
+        run: |
+          mkdir -p out
+          cp build/android/app/build/outputs/apk/debug/app-debug.apk out/aden-admission-portal.apk
+          ls -la out
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: aden-admission-portal-apk
+          path: out/aden-admission-portal.apk
+          if-no-files-found: error
