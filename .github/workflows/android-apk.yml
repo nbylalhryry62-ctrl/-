@@ -36,16 +36,10 @@ jobs:
           npx cap add android
           npx cap sync android
 
-      - name: Launcher icon and splash colour
+      - name: Launcher icon and background colour
         working-directory: build/android/app/src/main/res
         run: |
-          src=../../../../../../pwa-deploy/icons
-          for d in mdpi:48:108 hdpi:72:162 xhdpi:96:216 xxhdpi:144:324 xxxhdpi:192:432; do
-            IFS=: read name legacy adaptive <<< "$d"
-            convert "$src/icon-512.png" -resize ${legacy}x${legacy} mipmap-$name/ic_launcher.png
-            convert "$src/icon-512.png" -resize ${legacy}x${legacy} mipmap-$name/ic_launcher_round.png
-            convert "$src/icon-maskable-512.png" -resize ${adaptive}x${adaptive} mipmap-$name/ic_launcher_foreground.png
-          done
+          cp -r "$GITHUB_WORKSPACE"/android-build/icons/. .
           sed -i 's/#FFFFFF/#0F2942/I' values/ic_launcher_background.xml
 
       - name: Build debug APK
