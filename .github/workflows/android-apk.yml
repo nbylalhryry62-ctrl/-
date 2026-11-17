@@ -10,6 +10,9 @@ on:
       - "android-build/**"
       - ".github/workflows/android-apk.yml"
 
+permissions:
+  contents: write
+
 jobs:
   apk:
     runs-on: ubuntu-latest
@@ -57,3 +60,12 @@ jobs:
           name: aden-admission-portal-apk
           path: out/aden-admission-portal.apk
           if-no-files-found: error
+
+      - name: Publish as a release (direct download link)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: aden-portal-apk-${{ github.run_number }}
+          name: بوابة القبول - APK (${{ github.run_number }})
+          body: ملف تثبيت أندرويد (debug) مبني من الفرع ${{ github.ref_name }} عند الإصدار ${{ github.sha }}.
+          files: out/aden-admission-portal.apk
+          target_commitish: ${{ github.sha }}

@@ -67,7 +67,7 @@ python3 -m http.server 8080   # ثم افتح http://localhost:8080
 يغلّف `.github/workflows/android-apk.yml` تطبيق `pwa-deploy` في تطبيق أندرويد (Capacitor) ويبني ملف APK تلقائيًا:
 
 1. افتح تبويب **Actions** في GitHub، واختر **Build Android APK**، ثم **Run workflow** (يعمل أيضًا عند كل تعديل على التطبيق).
-2. بعد اكتمال التشغيل (نحو 5 دقائق) نزّل الملف `aden-admission-portal.apk` من قسم **Artifacts** أسفل صفحة التشغيل.
+2. بعد اكتمال التشغيل (نحو 5 دقائق) تجد الملف `aden-admission-portal.apk` في صفحة **Releases** بالمستودع (رابط مباشر)، وفي قسم **Artifacts** أسفل صفحة التشغيل.
 3. انقله إلى الهاتف وثبّته (يتطلب السماح بالتثبيت من مصادر غير معروفة).
 
 الملف موقّع بمفتاح تجريبي (debug) ويصلح للتجربة والتوزيع المباشر. للنشر على Google Play يلزم توقيعه بمفتاحك الخاص (release keystore محفوظ في GitHub Secrets).
