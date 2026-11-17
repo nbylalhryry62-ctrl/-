@@ -19,8 +19,22 @@
 | `csv/` | ملفات CSV بترميز UTF-8-SIG للفتح في Excel |
 | `database/aden_qbank_7654.sqlite` | قاعدة SQLite مفهرسة لـ `expo-sqlite` |
 | `expo-integration/qbankService.ts` | خدمة TypeScript مع دالة `buildDetailedDiagnosticCorrection` للتشخيص الفوري |
-| `pwa-deploy/` | التطبيق (`index.html` يضمّن البنك مضغوطًا)، `sw.js`، `manifest.json`، الأيقونات، `netlify.toml` |
-| `scripts/` | `validate_bank.py` للفحص، و`embed_bank.py` لإعادة تضمين البنك في الصفحة |
+| `pwa-deploy/` | التطبيق: `index.html` (هيكل فقط)، `css/` (5 ملفات: tokens وbase وcomponents وshell وviews)، `js/`، `sw.js`، `manifest.json`، `icons/`، `netlify.toml` |
+| `scripts/` | `validate_bank.py` للفحص، `build_data.py` لتجميع البنك في ملف التطبيق، `build_single.py` لإنتاج صفحة واحدة مستقلة |
+
+## بنية الواجهة (`pwa-deploy/js`)
+
+كل طبقة في مجلد مستقل، ولا يوجد كود مكرر بين الشاشات: بطاقة السؤال وشريط التقدم والحلقة والنوافذ تُبنى من مكان واحد.
+
+| المجلد | المسؤولية |
+|---|---|
+| `data/` | `syllabus.js` (المنهج)، `qbank-data.js` (البنك المضغوط، يُولَّد آليًا)، `bank.js` (فك الضغط والاستعلام) |
+| `core/` | `store` (تقدم المتعلم)، `storage` (تخزين آمن)، `router` (مسارات `#home` وغيرها)، `actions` (أحداث `data-act` بلا onclick) |
+| `ui/` | الأيقونات، المظهر، تنسيق الرياضيات، المكونات المشتركة، بطاقة السؤال، الهيكل العام |
+| `features/` | `exam.js` (محرك الاختبار والمؤقت)، `progress.js` (الجاهزية والإحصاءات) |
+| `views/` | شاشة لكل ملف: الرئيسية، المنهج، البنك، الاختبار، دفتر الأخطاء |
+
+لا يعتمد التطبيق على Tailwind أو مكتبة أيقونات خارجية، وتحتاج الخطوط فقط اتصالًا في أول زيارة (وإلا تُستخدم خطوط النظام).
 
 ## الكليات
 
@@ -51,7 +65,7 @@ python3 -m http.server 8080   # ثم افتح http://localhost:8080
 ## تعديل البنك
 
 1. عدّل الأسئلة في `data/qbank_full_7654.json`.
-2. شغّل `python3 scripts/embed_bank.py` لتحديث النسخة المضمّنة في الصفحة.
+2. شغّل `python3 scripts/build_data.py` لإعادة توليد `pwa-deploy/js/data/qbank-data.js`.
 3. حدّث ملفات الكليات وCSV وSQLite بما يطابق التعديل.
 4. شغّل `python3 scripts/validate_bank.py`. يشغّله GitHub Actions تلقائيًا عند كل push.
 
@@ -59,5 +73,6 @@ python3 -m http.server 8080   # ثم افتح http://localhost:8080
 
 ## ملاحظات
 
-- ميزات الذكاء الاصطناعي في الواجهة تحتاج مفتاح Gemini في `GeminiService.apiKey` داخل `pwa-deploy/index.html`. لا تضع مفتاحًا حقيقيًا في مستودع عام.
+- صفحة واحدة مستقلة للمشاركة: `python3 scripts/build_single.py` ينتج `dist/aden-portal.html`.
+- أُزيلت من هذا الإصدار شاشة «استوديو الذكاء الاصطناعي» لأنها كانت تتطلب مفتاح Gemini فارغًا في الكود، وكذلك أدوات تصدير TypeScript وSQL وملفات PWA التي تغطيها الآن سكربتات المستودع.
 - سجل التغييرات في [CHANGELOG.md](CHANGELOG.md).

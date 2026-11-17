@@ -41,9 +41,10 @@ if db_files:
     check(db.execute("select count(*) from questions").fetchone()[0] == n, "SQLite holds the same number of questions")
     check(db.execute("pragma integrity_check").fetchone()[0] == "ok", "SQLite integrity check")
 
-html = open(P("pwa-deploy", "index.html"), encoding="utf-8").read()
-blob = re.search(r'COMPRESSED_QBANK_B64 = "([^"]+)"', html).group(1)
+js = open(P("pwa-deploy", "js", "data", "qbank-data.js"), encoding="utf-8").read()
+blob = re.search(r'Aden\.qbankB64 = "([^"]+)"', js).group(1)
 emb = json.loads(zlib.decompress(base64.b64decode(blob), -15))
-check({r[0] for r in emb["q"]} == {q["id"] for q in qs}, "bank embedded in index.html has the same ids")
+check({r[0] for r in emb["q"]} == {q["id"] for q in qs}, "pwa-deploy/js/data/qbank-data.js has the same ids (run scripts/build_data.py if not)")
+check(all(len(set(r[13])) == len(r[13]) for r in emb["q"]), "compiled bank has no duplicate options")
 
 sys.exit(1 if errors else 0)

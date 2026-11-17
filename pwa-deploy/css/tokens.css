@@ -1,0 +1,47 @@
+/* Design tokens. Layout concept: fixed side rail (right, RTL) + wide reading column; bottom tab bar on phones.
+   Palette: ink navy, Aden-sea teal as the one brand colour, desaturated gold for highlights. */
+:root {
+  --bg: #f2f5f8;
+  --surface: #ffffff;
+  --surface-2: #eaf0f5;
+  --ink: #0d2237;
+  --muted: #566a7f;
+  --line: #dbe3eb;
+  --brand: #0a7a62;
+  --brand-ink: #ffffff;
+  --brand-soft: #d8efe8;
+  --gold: #a86f00;
+  --gold-soft: #fbeccb;
+  --good: #0a7a62;
+  --good-soft: #d8efe8;
+  --bad: #b8344a;
+  --bad-soft: #fbe2e6;
+  --rail: #0b1e31;
+  --rail-ink: #dbe6f1;
+  --rail-muted: #8ea3b8;
+  --shadow: 0 1px 2px rgba(13, 34, 55, .06), 0 8px 24px -12px rgba(13, 34, 55, .18);
+  --radius: 14px;
+  --radius-sm: 9px;
+  --font-body: "IBM Plex Sans Arabic", "Segoe UI", Tahoma, system-ui, sans-serif;
+  --font-display: "Readex Pro", "IBM Plex Sans Arabic", "Segoe UI", Tahoma, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --rail-w: 272px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #07111c; --surface: #0e1d2d; --surface-2: #142a40; --ink: #e8eff6; --muted: #94a7bb; --line: #1d3349;
+    --brand: #36c9a0; --brand-ink: #04281f; --brand-soft: #0f3a31; --gold: #e8b64a; --gold-soft: #3a2d0d;
+    --good: #36c9a0; --good-soft: #0f3a31; --bad: #ff7a8d; --bad-soft: #3d1621;
+    --rail: #050d16; --rail-ink: #dbe6f1; --rail-muted: #7d92a8;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 10px 30px -14px rgba(0, 0, 0, .7);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #07111c; --surface: #0e1d2d; --surface-2: #142a40; --ink: #e8eff6; --muted: #94a7bb; --line: #1d3349;
+  --brand: #36c9a0; --brand-ink: #04281f; --brand-soft: #0f3a31; --gold: #e8b64a; --gold-soft: #3a2d0d;
+  --good: #36c9a0; --good-soft: #0f3a31; --bad: #ff7a8d; --bad-soft: #3d1621;
+  --rail: #050d16; --rail-ink: #dbe6f1; --rail-muted: #7d92a8;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 10px 30px -14px rgba(0, 0, 0, .7);
+  color-scheme: dark;
+}
