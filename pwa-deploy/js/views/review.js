@@ -22,7 +22,9 @@ Aden.views.review = (() => {
         ${Aden.ui.pager(page, pages, "rv.page")}`;
     return `
     <div class="page-head"><div><h1>دفتر الأخطاء</h1><p>راجع ما أخطأت فيه وما حفظته، ثم اختبر نفسك عليه.</p></div>
-      <button class="btn btn-primary" data-act="rv.exam" ${list.length ? "" : "disabled"}>${I("play")}اختبار من هذه الأسئلة</button></div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <button class="btn btn-ghost" data-act="rv.due" ${Aden.learning.dueCount() ? "" : "disabled"}>${I("retry")}مراجعة اليوم (${Aden.learning.dueCount()})</button>
+        <button class="btn btn-primary" data-act="rv.exam" ${list.length ? "" : "disabled"}>${I("play")}اختبار من هذه الأسئلة</button></div></div>
     <div class="seg" role="tablist">
       <button role="tab" aria-selected="${tab === "mistakes"}" data-act="rv.tab" data-tab="mistakes">أخطائي (${fmt(st.mistakes.length)})</button>
       <button role="tab" aria-selected="${tab === "saved"}" data-act="rv.tab" data-tab="saved">المحفوظة (${fmt(st.bookmarks.length)})</button>
@@ -34,6 +36,7 @@ Aden.views.review = (() => {
     "rv.page": (el) => { page = Number(el.dataset.page); Aden.router.refresh(); window.scrollTo(0, 0); },
     "rv.bank": () => Aden.router.go("bank"),
     "rv.master": (el) => { Aden.store.remove("mistakes", el.dataset.qid); Aden.shell.syncBadges(); Aden.router.refresh(); },
+    "rv.due": () => { if (Aden.exam.startFromIds(Aden.learning.due(20), "مراجعة اليوم", 20)) Aden.router.go("exam"); },
     "rv.exam": () => {
       if (Aden.exam.startFromIds(ids(), tab === "mistakes" ? "اختبار من أخطائي" : "اختبار من المحفوظات")) Aden.router.go("exam");
     },

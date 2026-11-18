@@ -1,9 +1,8 @@
 /* Service worker - بوابة القبول الذكية (جامعة عدن) */
-var VERSION = 'v2026-ui2';
+var VERSION = 'v92a8e50561';
 var CORE = 'aden-core-' + VERSION;
 var RUNTIME = 'aden-runtime-' + VERSION;
-var PRECACHE = ['./', './index.html', './manifest.json', './icons/icon-192.png', './icons/icon-512.png', './icons/icon-maskable-512.png', './icons/apple-touch-icon.png',
-  './js/data/syllabus.js', './js/data/qbank-data.js', './js/core/util.js', './js/core/storage.js', './js/core/store.js', './js/core/actions.js', './js/core/router.js', './js/ui/icons.js', './js/ui/theme.js', './js/ui/mathtext.js', './js/ui/components.js', './js/data/bank.js', './js/ui/question.js', './js/features/progress.js', './js/features/exam.js', './js/ui/shell.js', './js/views/home.js', './js/views/syllabus.js', './js/views/bank.js', './js/views/exam.js', './js/views/review.js', './js/main.js', './css/tokens.css', './css/base.css', './css/components.css', './css/shell.css', './css/views.css'];
+var PRECACHE = ['./', './index.html', './manifest.json', './icons/icon-192.png', './icons/icon-512.png', './icons/icon-maskable-512.png', './icons/apple-touch-icon.png', './js/data/syllabus.js', './js/data/qbank-data.js', './js/core/util.js', './js/core/storage.js', './js/core/store.js', './js/core/actions.js', './js/core/router.js', './js/ui/icons.js', './js/ui/theme.js', './js/ui/mathtext.js', './js/ui/components.js', './js/ui/charts.js', './js/data/bank.js', './js/ui/question.js', './js/features/progress.js', './js/features/learning.js', './js/features/exam.js', './js/ui/search.js', './js/ui/shell.js', './js/views/home.js', './js/views/syllabus.js', './js/views/bank.js', './js/views/exam.js', './js/views/review.js', './js/main.js', './css/tokens.css', './css/base.css', './css/components.css', './css/shell.css', './css/views.css'];
 
 self.addEventListener('install', function (event) {
   event.waitUntil(caches.open(CORE).then(function (c) { return c.addAll(PRECACHE); }));

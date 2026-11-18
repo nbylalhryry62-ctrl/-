@@ -6,8 +6,13 @@ Aden.store = (() => {
     bookmarks: S.get("bookmarks", S.legacy("aden_bookmarked_questions", [])),
     mistakes: S.get("mistakes", S.legacy("aden_mistake_questions", [])),
     history: S.get("history", []),
-    theme: S.get("theme", "system"),
+    theme: S.get("theme", S.legacy("aden_dark_mode", null) === true ? "dark" : "system"),
     faculty: S.get("faculty", "medical"),
+    stats: S.get("stats", {}),      // per question: { a: attempts, c: correct, b: Leitner box 0-5, t: last time, d: next review time }
+    days: S.get("days", []),        // days with activity, "YYYY-MM-DD"
+    daily: S.get("daily", { k: "", n: 0 }),
+    goal: S.get("goal", 20),
+    badges: S.get("badges", {}),    // badge id -> unlock time
   };
   const listeners = new Set();
   const emit = () => listeners.forEach((fn) => fn(state));

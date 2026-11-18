@@ -45,7 +45,7 @@ Aden.views.syllabus = (() => {
   Aden.actions.register({
     "syl.faculty": (el) => { Aden.store.set("faculty", el.dataset.fid); trackId = null; Aden.router.refresh(); },
     "syl.track": (el) => { trackId = el.dataset.tid; Aden.router.refresh(); },
-    "syl.unit": (el) => { Aden.store.toggle("units", el.dataset.uid); Aden.router.refresh(); },
+    "syl.unit": (el) => { Aden.store.toggle("units", el.dataset.uid); Aden.learning.check(); Aden.router.refresh(); },
     "syl.practice": (el) => {
       const fid = Aden.store.state.faculty;
       Aden.exam.set({ fid, tid: el.dataset.tid, sid: el.dataset.sid, diff: "all" });

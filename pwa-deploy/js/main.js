@@ -12,7 +12,17 @@
     throw e;
   }
   Aden.store.subscribe(Aden.shell.syncBadges);
+  const restored = Aden.exam.restore();   // an exam that was running when the page closed
+  if (restored) location.hash = "exam";
   Aden.router.render();
+  if (restored === "finished") Aden.ui.toast("انتهى وقت اختبارك أثناء غيابك، وهذه نتيجته");
+  document.addEventListener("keydown", (e) => {
+    const typing = /^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName);
+    if (((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") || (e.key === "/" && !typing && !Aden.exam.active())) {
+      e.preventDefault();
+      Aden.search.open();
+    }
+  });
   if ("serviceWorker" in navigator && /^https?:$/.test(location.protocol)) {
     window.addEventListener("load", () => navigator.serviceWorker.register("./sw.js").catch(() => {}));
   }

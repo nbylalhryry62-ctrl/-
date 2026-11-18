@@ -72,6 +72,14 @@ python3 -m http.server 8080   # ثم افتح http://localhost:8080
 
 الملف موقّع بمفتاح تجريبي (debug) ويصلح للتجربة والتوزيع المباشر. للنشر على Google Play يلزم توقيعه بمفتاحك الخاص (release keystore محفوظ في GitHub Secrets).
 
+## الاختبارات والبناء
+```bash
+python3 scripts/validate_bank.py      # سلامة البنك
+python3 scripts/build_sw.py           # ختم sw.js بعد أي تعديل في pwa-deploy (يُفحص في CI)
+node --test tests/unit.test.mjs       # اختبارات الوحدة
+node tests/e2e.mjs                    # اختبار المتصفح (يتطلب Playwright وخادمًا على pwa-deploy)
+```
+
 ## تعديل البنك
 
 1. عدّل الأسئلة في `data/qbank_full_7654.json`.

@@ -79,6 +79,7 @@ Aden.views.exam = (() => {
             ? `<button class="btn btn-primary" data-act="ex.finish">إنهاء وعرض النتيجة</button>`
             : `<button class="btn btn-primary" data-act="ex.go" data-i="${s.i + 1}">التالي${I("next")}</button>`}
         </div>
+        <p class="hint">اختصارات: <kbd>1</kbd>–<kbd>4</kbd> للاختيار، <kbd>←</kbd> <kbd>→</kbd> للتنقل، <kbd>F</kbd> للتعليم</p>
       </div>
       <aside class="card palette">
         <span class="eyebrow">خريطة الأسئلة</span>
@@ -133,6 +134,20 @@ Aden.views.exam = (() => {
   });
 
   const again = () => Aden.router.refresh();
+
+  document.addEventListener("keydown", (e) => {
+    const s = E.session;
+    if (!s || Aden.router.current !== "exam" || e.ctrlKey || e.metaKey || e.altKey || document.querySelector(".modal-back")) return;
+    if (/^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName)) return;
+    const q = s.qs[s.i];
+    if (/^[1-5]$/.test(e.key) && Number(e.key) <= q.opts.length) E.answer(q.id, Number(e.key) - 1);
+    else if (e.key === "ArrowLeft") E.go(s.i + 1);   // RTL: "next" sits on the left
+    else if (e.key === "ArrowRight") E.go(s.i - 1);
+    else if (e.key.toLowerCase() === "f" || e.key === "ب") E.flag(q.id);
+    else return;
+    e.preventDefault();
+    again();
+  });
   const patch = (obj) => (el) => { E.set(obj(el)); E.save(); again(); };
 
   Aden.actions.register({

@@ -93,6 +93,7 @@ Aden.views.bank = (() => {
       Aden.ui.toast(`تم تجهيز ${fmt(rows.length)} سؤال`);
     },
   });
-  return { render };
+  const open = (patch) => { Object.assign(qb, defaults(), patch); Aden.router.go("bank"); };
+  return { render, open };
 })();
 Aden.router.register("bank", Aden.views.bank);

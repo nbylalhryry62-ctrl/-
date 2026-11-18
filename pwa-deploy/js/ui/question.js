@@ -68,7 +68,9 @@ Aden.question = (() => {
       if (picks[q.id] !== undefined) return;
       picks[q.id] = idx;
       if (idx !== q.ci) Aden.store.add("mistakes", q.id);
+      Aden.learning.recordMany([[q.id, idx === q.ci]]);
       refresh(q.id);
+      Aden.shell.syncBadges();
     },
     "q.bookmark": (el) => {
       Aden.store.toggle("bookmarks", el.dataset.qid);

@@ -34,7 +34,9 @@ Aden.ui = (() => {
     back.innerHTML = `<div class="modal card" role="dialog" aria-modal="true" aria-label="${esc(title)}">
       <h3>${esc(title)}</h3><p style="color:var(--muted)">${esc(text)}</p>
       <div class="row"><button class="btn btn-ghost" data-x="0">${esc(cancel)}</button><button class="btn ${danger ? "btn-danger" : "btn-primary"}" data-x="1">${esc(ok)}</button></div></div>`;
-    const done = (v) => { back.remove(); resolve(v); };
+    const onKey = (e) => { if (e.key === "Escape") done(false); };
+    const done = (v) => { document.removeEventListener("keydown", onKey); back.remove(); resolve(v); };
+    document.addEventListener("keydown", onKey);
     back.addEventListener("click", (e) => { const b = e.target.closest("[data-x]"); if (b) done(b.dataset.x === "1"); else if (e.target === back) done(false); });
     document.body.appendChild(back);
     back.querySelector("[data-x='1']").focus();
