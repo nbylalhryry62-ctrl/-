@@ -1,0 +1,53 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // An admin is a Firebase Auth user whose uid has a document in /admins (created by hand in the console).
+    function isAdmin() {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+
+    // The only write a student device may make: bind an unused, active code to itself, once.
+    function isActivation() {
+      let before = resource.data;
+      let after = request.resource.data;
+      return request.auth == null
+        && before.isActive == true
+        && before.isUsed == false
+        && after.isUsed == true
+        && after.deviceId is string
+        && after.deviceId.size() >= 16
+        && after.deviceId.size() <= 64
+        && after.activatedAt is timestamp
+        && after.diff(before).affectedKeys().hasOnly(['isUsed', 'deviceId', 'activatedAt']);
+    }
+
+    // Codes: a device can read ONE code (it must know the document id) but can never list them.
+    match /access_codes/{code} {
+      allow get: if true;
+      allow list: if isAdmin();
+      allow create, delete: if isAdmin();
+      allow update: if isAdmin() || isActivation();
+    }
+
+    // Remote settings and question edits: everyone reads, only admins write.
+    match /app_config/{doc} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    match /question_patches/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Admin list: managed from the console only.
+    match /admins/{uid} {
+      allow read, write: if false;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

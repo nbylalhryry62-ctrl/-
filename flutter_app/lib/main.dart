@@ -7,19 +7,32 @@ import 'screens/exam.dart';
 import 'screens/home.dart';
 import 'screens/review.dart';
 import 'store.dart';
+import 'remote/firestore.dart';
+import 'access.dart';
+import 'screens/admin.dart';
+import 'screens/gate.dart';
 import 'search.dart';
+import 'services.dart';
+import 'sync.dart';
 import 'widgets.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final prefs = await SharedPreferences.getInstance();
   final bank = await Bank.load();
-  runApp(AdenApp(store: AppStore(bank, prefs)));
+  final store = AppStore(bank, prefs);
+  final services = Services.create(store, (fs) => ContentSync(fs, prefs, bank)..loadLocal());
+  runApp(AdenApp(services: services));
+  if (FirebaseConfig.enabled) {
+    await services.access.init();
+    await services.sync.refresh();
+  }
 }
 
 class AdenApp extends StatelessWidget {
-  const AdenApp({super.key, required this.store});
-  final AppStore store;
+  const AdenApp({super.key, required this.services});
+  final Services services;
+  AppStore get store => services.store;
 
   ThemeData _theme(Brightness b) => ThemeData(
         useMaterial3: true,
@@ -40,15 +53,43 @@ class AdenApp extends StatelessWidget {
         theme: _theme(Brightness.light),
         darkTheme: _theme(Brightness.dark),
         themeMode: store.theme,
-        home: Shell(store: store),
+        home: Root(services: services),
       ),
     );
   }
 }
 
+/// Decides what to show: activation gate, maintenance notice, or the app itself.
+class Root extends StatelessWidget {
+  const Root({super.key, required this.services});
+  final Services services;
+
+  @override
+  Widget build(BuildContext context) {
+    final s = services;
+    return ListenableBuilder(
+      listenable: Listenable.merge([s.access, s.sync]),
+      builder: (context, _) {
+        void admin() => openAdmin(context, s);
+        if (!FirebaseConfig.enabled) return Shell(services: s);   // no Firebase configured: open app
+        switch (s.access.status) {
+          case AccessStatus.loading:
+            return const Scaffold(body: Center(child: CircularProgressIndicator()));
+          case AccessStatus.locked:
+            return GateScreen(access: s.access, onAdmin: admin);
+          case AccessStatus.active:
+            if (s.sync.config.maintenanceMode) return MaintenanceScreen(message: s.sync.config.maintenanceMessage, onAdmin: admin);
+            return Shell(services: s);
+        }
+      },
+    );
+  }
+}
+
 class Shell extends StatefulWidget {
-  const Shell({super.key, required this.store});
-  final AppStore store;
+  const Shell({super.key, required this.services});
+  final Services services;
+  AppStore get store => services.store;
   @override
   State<Shell> createState() => _ShellState();
 }
@@ -81,14 +122,14 @@ class _ShellState extends State<Shell> {
   Widget build(BuildContext context) {
     final s = widget.store;
     final pages = [
-      HomeScreen(store: s, go: (t) => setState(() => tab = t)),
+      HomeScreen(store: s, sync: widget.services.sync, go: (t) => setState(() => tab = t)),
       BankScreen(store: s),
-      ExamScreen(store: s),
+      ExamScreen(store: s, defaultMinutes: widget.services.sync.config.defaultExamMinutes),
       ReviewScreen(store: s),
     ];
     return Scaffold(
       appBar: AppBar(
-        title: const Text('بوابة القبول الذكية'),
+        title: GestureDetector(onLongPress: () => openAdmin(context, widget.services), child: const Text('بوابة القبول الذكية')),
         actions: [
           IconButton(tooltip: 'بحث', icon: const Icon(Icons.search), onPressed: () => showSearch(context: context, delegate: QuestionSearch(s))),
           IconButton(

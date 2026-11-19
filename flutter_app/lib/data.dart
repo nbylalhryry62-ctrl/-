@@ -36,16 +36,43 @@ const facultyMeta = <String, FacultyMeta>{
 FacultyMeta metaOf(String fid) => facultyMeta[fid] ?? const FacultyMeta('x', Color(0xFF0A7A62), Icons.school_outlined);
 
 class Bank {
-  Bank._(this.all) {
+  Bank._(List<Question> base) : _base = base, all = base {
+    _index();
+  }
+  final List<Question> _base;
+  List<Question> all;
+  factory Bank.forTest(List<Question> qs) => Bank._(qs);
+  final Map<String, Question> byId = {};
+  final Map<String, String> facultyTitles = {};
+
+  /// Faculties the admin has hidden remotely. Their questions disappear from browsing and exams.
+  Set<String> hidden = {};
+
+  void _index() {
+    byId.clear();
     for (final q in all) {
       byId[q.id] = q;
       facultyTitles.putIfAbsent(q.fid, () => q.facultyTitle);
     }
   }
-  final List<Question> all;
-  factory Bank.forTest(List<Question> qs) => Bank._(qs);
-  final Map<String, Question> byId = {};
-  final Map<String, String> facultyTitles = {};
+
+  /// Applies remote question edits on top of the bundled bank (add, change or delete by id).
+  void applyPatches(Map<String, Map<String, dynamic>> patches) {
+    final m = {for (final q in _base) q.id: q};
+    patches.forEach((id, p) {
+      if (p['deleted'] == true) {
+        m.remove(id);
+      } else {
+        try {
+          m[id] = Question.fromJson({...p, 'id': id});
+        } catch (_) {
+          // ignore a malformed patch rather than crash the app
+        }
+      }
+    });
+    all = m.values.toList(growable: false);
+    _index();
+  }
 
   static Future<Bank> load() async {
     final data = await rootBundle.load('assets/qbank.json.gz');
@@ -54,8 +81,9 @@ class Bank {
     return Bank._(list.map((e) => Question.fromJson(e as Map<String, dynamic>)).toList(growable: false));
   }
 
-  List<String> get facultyIds => facultyMeta.keys.where(facultyTitles.containsKey).toList();
+  List<String> get facultyIds => facultyMeta.keys.where((f) => facultyTitles.containsKey(f) && !hidden.contains(f)).toList();
   int count(String fid) => all.where((q) => q.fid == fid).length;
+  List<String> get allFacultyIds => facultyMeta.keys.where(facultyTitles.containsKey).toList();
   List<String> subjects(String? fid) {
     final s = <String>{};
     for (final q in all) {
@@ -64,9 +92,10 @@ class Bank {
     return s.toList()..sort();
   }
 
-  List<Question> query({String? fid, String? subject, String? diff, String search = ''}) {
+  List<Question> query({String? fid, String? subject, String? diff, String search = '', bool includeHidden = false}) {
     final t = search.trim().toLowerCase();
     return all.where((q) {
+      if (!includeHidden && hidden.contains(q.fid)) return false;
       if (fid != null && q.fid != fid) return false;
       if (subject != null && q.subject != subject) return false;
       if (diff != null && q.diff != diff) return false;

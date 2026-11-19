@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
 import '../data.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../chart.dart';
+import '../sync.dart';
 import '../store.dart';
 import '../widgets.dart';
 
 class HomeScreen extends StatelessWidget {
-  const HomeScreen({super.key, required this.store, required this.go});
+  const HomeScreen({super.key, required this.store, required this.sync, required this.go});
   final AppStore store;
+  final ContentSync sync;
   final void Function(int tab) go;
 
   @override
@@ -14,7 +17,19 @@ class HomeScreen extends StatelessWidget {
     final bank = store.bank;
     final cs = Theme.of(context).colorScheme;
     final goalP = (store.todayCount / store.goal).clamp(0.0, 1.0);
+    final cfg = sync.config;
     return ListView(padding: const EdgeInsets.all(16), children: [
+      if (cfg.announcement.isNotEmpty)
+        Container(
+          margin: const EdgeInsets.only(bottom: 14),
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(color: Colors.amber.withValues(alpha: .18), borderRadius: BorderRadius.circular(14), border: Border.all(color: Colors.amber.shade700)),
+          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Icon(Icons.campaign_outlined, color: Colors.amber.shade800),
+            const SizedBox(width: 10),
+            Expanded(child: Text(cfg.announcement)),
+          ]),
+        ),
       Container(
         padding: const EdgeInsets.all(22),
         decoration: BoxDecoration(
@@ -38,6 +53,18 @@ class HomeScreen extends StatelessWidget {
           ]),
         ]),
       ),
+      if (cfg.contactUrl.isNotEmpty)
+        Padding(
+          padding: const EdgeInsets.only(top: 10),
+          child: OutlinedButton.icon(
+            onPressed: () async {
+              final uri = Uri.tryParse(cfg.contactUrl);
+              if (uri != null) await launchUrl(uri, mode: LaunchMode.externalApplication);
+            },
+            icon: const Icon(Icons.chat_outlined),
+            label: const Text('تواصل معنا'),
+          ),
+        ),
       const SizedBox(height: 16),
       GridView.count(
         crossAxisCount: 2, shrinkWrap: true, physics: const NeverScrollableScrollPhysics(), childAspectRatio: 1.6, mainAxisSpacing: 10, crossAxisSpacing: 10,

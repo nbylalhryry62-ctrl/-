@@ -5,8 +5,9 @@ import '../store.dart';
 import '../widgets.dart';
 
 class ExamScreen extends StatefulWidget {
-  const ExamScreen({super.key, required this.store});
+  const ExamScreen({super.key, required this.store, this.defaultMinutes = 20});
   final AppStore store;
+  final int defaultMinutes;
   @override
   State<ExamScreen> createState() => _ExamScreenState();
 }
@@ -14,7 +15,7 @@ class ExamScreen extends StatefulWidget {
 class _ExamScreenState extends State<ExamScreen> {
   String? fid;
   int count = 20;
-  int minutes = 20;
+  late int minutes = widget.defaultMinutes.clamp(5, 90);
 
   @override
   void initState() {
