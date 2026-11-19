@@ -154,7 +154,7 @@ class _QuestionEditorState extends State<QuestionEditor> {
             Expanded(
               child: DropdownButtonFormField<String>(
                 initialValue: diff, decoration: const InputDecoration(labelText: 'الصعوبة', border: OutlineInputBorder()),
-                items: const [for (final d in ['سهل', 'متوسط', 'صعب']) DropdownMenuItem(value: d, child: Text(d))],
+                items: [for (final d in ['سهل', 'متوسط', 'صعب']) DropdownMenuItem(value: d, child: Text(d))],
                 onChanged: (v) => setState(() => diff = v!),
               ),
             ),

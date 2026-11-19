@@ -75,7 +75,7 @@ class Firestore {
   String get _root => 'projects/$projectId/databases/(default)/documents';
 
   Uri _uri(String path, [Map<String, List<String>>? q]) =>
-      Uri.parse('$host/v1/$_root/$path').replace(queryParametersAll: {'key': [apiKey], ...?q});
+      Uri.parse('$host/v1/$_root/$path').replace(queryParameters: <String, dynamic>{'key': apiKey, ...?q});
 
   Future<Map<String, dynamic>> _send(String method, Uri uri, {Object? body}) async {
     final req = http.Request(method, uri)..headers['content-type'] = 'application/json';
