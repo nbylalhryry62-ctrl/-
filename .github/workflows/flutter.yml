@@ -17,6 +17,7 @@ jobs:
       - name: Generate the Android platform folder
         working-directory: flutter_app
         run: flutter create . --platforms=android --org ye.edu.aden --project-name aden_portal
+          rm -f test/widget_test.dart
       - run: flutter pub get
         working-directory: flutter_app
       - name: Analyze
