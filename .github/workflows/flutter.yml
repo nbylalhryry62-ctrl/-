@@ -53,6 +53,6 @@ jobs:
         with:
           tag_name: aden-portal-flutter-${{ github.run_number }}
           name: بوابة القبول - Flutter APK (${{ github.run_number }})
-          body: نسخة Flutter (Release). الأصغر للهواتف الحديثة: aden-portal-flutter-arm64.apk
+          body: "نسخة Flutter (Release). الأصغر للهواتف الحديثة هي aden-portal-flutter-arm64.apk"
           files: out/*.apk
           target_commitish: ${{ github.sha }}
