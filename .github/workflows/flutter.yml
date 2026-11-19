@@ -19,6 +19,9 @@ jobs:
         run: |
           flutter create . --platforms=android --org ye.edu.aden --project-name aden_portal
           rm -f test/widget_test.dart
+          # Kotlin 2.3.x artifacts are not always resolvable from the plugin portal; pin a published one
+          sed -i 's/org.jetbrains.kotlin.android" version "[0-9.]*"/org.jetbrains.kotlin.android" version "2.2.20"/' android/settings.gradle.kts
+          grep -n kotlin android/settings.gradle.kts
       - run: flutter pub get
         working-directory: flutter_app
       - name: Analyze
