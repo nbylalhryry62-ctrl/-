@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../data.dart';
+import '../chart.dart';
 import '../store.dart';
 import '../widgets.dart';
 
@@ -49,6 +50,50 @@ class HomeScreen extends StatelessWidget {
       ),
       const SizedBox(height: 6),
       LinearProgressIndicator(value: goalP, minHeight: 8, borderRadius: BorderRadius.circular(8)),
+      Align(
+        alignment: AlignmentDirectional.centerStart,
+        child: TextButton.icon(
+          onPressed: () => showModalBottomSheet<void>(
+            context: context,
+            builder: (c) => SafeArea(
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+                const ListTile(title: Text('الهدف اليومي (عدد الأسئلة)')),
+                for (final g in [10, 20, 30, 50])
+                  ListTile(
+                    title: Text('$g سؤالًا'),
+                    trailing: store.goal == g ? const Icon(Icons.check) : null,
+                    onTap: () {
+                      store.setGoal(g);
+                      Navigator.pop(c);
+                    },
+                  ),
+              ]),
+            ),
+          ),
+          icon: const Icon(Icons.tune, size: 18),
+          label: const Text('تغيير الهدف'),
+        ),
+      ),
+      if (store.history.isNotEmpty) ...[
+        const SizedBox(height: 10),
+        Text('تطوّر نتائجك', style: Theme.of(context).textTheme.titleLarge),
+        const SizedBox(height: 8),
+        TrendChart(store.history.take(12).map((e) => e.pct).toList().reversed.toList()),
+      ],
+      const SizedBox(height: 22),
+      Text('الأوسمة (${store.badges.length}/${allBadges.length})', style: Theme.of(context).textTheme.titleLarge),
+      const SizedBox(height: 10),
+      Wrap(spacing: 8, runSpacing: 8, children: [
+        for (final b in allBadges)
+          Tooltip(
+            message: b.hint,
+            child: Chip(
+              avatar: Icon(b.icon, size: 18, color: store.badges.contains(b.id) ? Colors.amber.shade800 : null),
+              label: Text(b.title),
+              backgroundColor: store.badges.contains(b.id) ? Colors.amber.withValues(alpha: .2) : null,
+            ),
+          ),
+      ]),
       const SizedBox(height: 22),
       Text('إتقان الكليات', style: Theme.of(context).textTheme.titleLarge),
       const SizedBox(height: 10),

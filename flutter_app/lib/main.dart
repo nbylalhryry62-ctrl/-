@@ -7,6 +7,7 @@ import 'screens/exam.dart';
 import 'screens/home.dart';
 import 'screens/review.dart';
 import 'store.dart';
+import 'search.dart';
 import 'widgets.dart';
 
 Future<void> main() async {
@@ -56,6 +57,27 @@ class _ShellState extends State<Shell> {
   int tab = 0;
 
   @override
+  void initState() {
+    super.initState();
+    widget.store.addListener(_announce);
+  }
+
+  @override
+  void dispose() {
+    widget.store.removeListener(_announce);
+    super.dispose();
+  }
+
+  // Tell the user when a badge unlocks.
+  void _announce() {
+    final s = widget.store;
+    if (s.newBadges.isEmpty || !mounted) return;
+    final names = s.newBadges.map((b) => b.title).join('، ');
+    s.newBadges.clear();
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('وسام جديد: $names')));
+  }
+
+  @override
   Widget build(BuildContext context) {
     final s = widget.store;
     final pages = [
@@ -68,6 +90,7 @@ class _ShellState extends State<Shell> {
       appBar: AppBar(
         title: const Text('بوابة القبول الذكية'),
         actions: [
+          IconButton(tooltip: 'بحث', icon: const Icon(Icons.search), onPressed: () => showSearch(context: context, delegate: QuestionSearch(s))),
           IconButton(
             tooltip: 'الوضع',
             icon: Icon(Theme.of(context).brightness == Brightness.dark ? Icons.light_mode_outlined : Icons.dark_mode_outlined),

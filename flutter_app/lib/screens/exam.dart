@@ -17,6 +17,34 @@ class _ExamScreenState extends State<ExamScreen> {
   int minutes = 20;
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _resume());
+  }
+
+  // Reopen an exam that was running when the app was closed (or finish it if time ran out).
+  void _resume() {
+    final j = widget.store.loadExam();
+    if (j == null || !mounted) return;
+    final bank = widget.store.bank;
+    final qs = (j['ids'] as List).map((i) => bank.byId[i]).whereType<Question>().toList();
+    final ends = DateTime.fromMillisecondsSinceEpoch(j['ends'] as int);
+    if (qs.isEmpty) {
+      widget.store.saveExam(null);
+      return;
+    }
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ExamRun(
+          store: widget.store, title: j['title'] as String, questions: qs, minutes: 0, endsAt: ends,
+          answers: (j['answers'] as Map<String, dynamic>).map((k, v) => MapEntry(k, v as int)), index: j['i'] as int,
+        ),
+      ),
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
     final bank = widget.store.bank;
     final pool = bank.query(fid: fid);
@@ -63,7 +91,10 @@ class _ExamScreenState extends State<ExamScreen> {
 }
 
 class ExamRun extends StatefulWidget {
-  const ExamRun({super.key, required this.store, required this.title, required this.questions, required this.minutes});
+  const ExamRun({super.key, required this.store, required this.title, required this.questions, required this.minutes, this.endsAt, this.answers, this.index = 0});
+  final DateTime? endsAt;
+  final Map<String, int>? answers;
+  final int index;
   final AppStore store;
   final String title;
   final List<Question> questions;
@@ -73,9 +104,9 @@ class ExamRun extends StatefulWidget {
 }
 
 class _ExamRunState extends State<ExamRun> with WidgetsBindingObserver {
-  late final DateTime endsAt = DateTime.now().add(Duration(minutes: widget.minutes));
-  final answers = <String, int>{};
-  int i = 0;
+  late final DateTime endsAt = widget.endsAt ?? DateTime.now().add(Duration(minutes: widget.minutes));
+  late final Map<String, int> answers = {...?widget.answers};
+  late int i = widget.index;
   Timer? _timer;
   int left = 0;
   bool finished = false;
@@ -85,8 +116,13 @@ class _ExamRunState extends State<ExamRun> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     left = _remaining();
+    _persist();
     _timer = Timer.periodic(const Duration(seconds: 1), (_) => _tick());
   }
+
+  void _persist() => widget.store.saveExam({
+        'title': widget.title, 'ids': widget.questions.map((q) => q.id).toList(), 'ends': endsAt.millisecondsSinceEpoch, 'answers': answers, 'i': i,
+      });
 
   int _remaining() => endsAt.difference(DateTime.now()).inSeconds.clamp(0, 1 << 30);
 
@@ -113,6 +149,7 @@ class _ExamRunState extends State<ExamRun> with WidgetsBindingObserver {
     if (finished) return;
     finished = true;
     _timer?.cancel();
+    widget.store.saveExam(null);
     var c = 0, w = 0;
     final rec = <MapEntry<String, bool>>[];
     for (final q in widget.questions) {
@@ -160,7 +197,10 @@ class _ExamRunState extends State<ExamRun> with WidgetsBindingObserver {
           bottom: PreferredSize(preferredSize: const Size.fromHeight(4), child: LinearProgressIndicator(value: answers.length / widget.questions.length)),
         ),
         body: ListView(padding: const EdgeInsets.all(16), children: [
-          QuestionCard(q: q, index: i + 1, instant: false, selected: answers[q.id], onPick: (a) => setState(() => answers[q.id] = a)),
+          QuestionCard(q: q, index: i + 1, instant: false, selected: answers[q.id], onPick: (a) {
+            setState(() => answers[q.id] = a);
+            _persist();
+          }),
           const SizedBox(height: 12),
           Wrap(spacing: 6, runSpacing: 6, children: [
             for (var k = 0; k < widget.questions.length; k++)
