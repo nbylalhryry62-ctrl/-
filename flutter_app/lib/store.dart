@@ -97,7 +97,7 @@ class AppStore extends ChangeNotifier {
   final List<Award> newBadges = [];
 
   List<Award> _checkBadges() {
-    final got = <Badge>[];
+    final got = <Award>[];
     for (final b in allBadges) {
       if (!badges.contains(b.id) && b.test(this)) {
         badges.add(b.id);
@@ -172,7 +172,7 @@ class Award {
   final bool Function(AppStore) test;
 }
 
-final allBadges = <Badge>[
+final allBadges = <Award>[
   Award('first', 'البداية', 'أجب عن أول سؤال', Icons.rocket_launch_outlined, (s) => s.answeredTotal >= 1),
   Award('q100', '100 سؤال', 'أجب عن 100 سؤال مختلف', Icons.looks_one_outlined, (s) => s.answeredTotal >= 100),
   Award('q500', '500 سؤال', 'أجب عن 500 سؤال مختلف', Icons.military_tech_outlined, (s) => s.answeredTotal >= 500),
