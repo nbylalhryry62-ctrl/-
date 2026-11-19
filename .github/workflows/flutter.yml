@@ -1,0 +1,40 @@
+name: Flutter app
+on:
+  push:
+    paths: ["flutter_app/**", ".github/workflows/flutter.yml", "data/**"]
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: "17" }
+      - uses: subosito/flutter-action@v2
+        with: { channel: stable, cache: true }
+      - name: Generate the Android platform folder
+        working-directory: flutter_app
+        run: flutter create . --platforms=android --org ye.edu.aden --project-name aden_portal
+      - run: flutter pub get
+        working-directory: flutter_app
+      - name: Analyze
+        working-directory: flutter_app
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings
+      - name: Test
+        working-directory: flutter_app
+        run: flutter test
+      - name: Build APK
+        working-directory: flutter_app
+        run: flutter build apk --release
+      - run: mkdir -p out && cp flutter_app/build/app/outputs/flutter-apk/app-release.apk out/aden-portal-flutter.apk
+      - uses: actions/upload-artifact@v4
+        with: { name: aden-portal-flutter-apk, path: out/aden-portal-flutter.apk, if-no-files-found: error }
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: aden-portal-flutter-${{ github.run_number }}
+          name: بوابة القبول - Flutter APK (${{ github.run_number }})
+          body: نسخة Flutter الأصلية (Release) من الفرع ${{ github.ref_name }}.
+          files: out/aden-portal-flutter.apk
+          target_commitish: ${{ github.sha }}
