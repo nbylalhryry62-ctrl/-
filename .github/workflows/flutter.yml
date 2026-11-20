@@ -30,6 +30,7 @@ jobs:
           # The generated main manifest has no INTERNET permission (only debug/profile do); release builds need it.
           sed -i '0,/<application/s//<uses-permission android:name="android.permission.INTERNET"\/>\n    <application/' android/app/src/main/AndroidManifest.xml
           grep -n "INTERNET" android/app/src/main/AndroidManifest.xml
+      - run: python3 scripts/fetch_fonts.py
       - run: flutter pub get
         working-directory: flutter_app
       - name: Analyze
@@ -70,6 +71,7 @@ jobs:
           flutter create . --platforms=web --org ye.edu.aden --project-name aden_portal
           rm -f test/widget_test.dart
           python3 ../scripts/apply_flutter_icons.py
+      - run: python3 scripts/fetch_fonts.py
       - run: flutter pub get
         working-directory: flutter_app
       - name: Build web (CanvasKit bundled, works offline once installed)
@@ -105,6 +107,7 @@ jobs:
           flutter create . --platforms=ios --org ye.edu.aden --project-name aden_portal
           rm -f test/widget_test.dart
           python3 ../scripts/apply_flutter_icons.py
+      - run: python3 scripts/fetch_fonts.py
       - run: flutter pub get
         working-directory: flutter_app
       - name: Build (no code signing)

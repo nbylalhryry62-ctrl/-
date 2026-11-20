@@ -36,6 +36,7 @@ class AdenApp extends StatelessWidget {
 
   ThemeData _theme(Brightness b) => ThemeData(
         useMaterial3: true,
+        fontFamily: 'IBMPlexSansArabic',
         colorScheme: ColorScheme.fromSeed(seedColor: brand, brightness: b),
         cardTheme: CardThemeData(elevation: 0, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: b == Brightness.dark ? Colors.white12 : Colors.black12))),
       );

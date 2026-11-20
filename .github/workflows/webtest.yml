@@ -1,0 +1,33 @@
+name: Web test build (temporary)
+on:
+  push:
+    paths: ["flutter_app/.webtest"]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install pillow
+      - uses: subosito/flutter-action@v2
+        with: { channel: stable, cache: true }
+      - working-directory: flutter_app
+        run: |
+          flutter create . --platforms=web --org ye.edu.aden --project-name aden_portal
+          rm -f test/widget_test.dart
+          python3 ../scripts/apply_flutter_icons.py
+      - run: python3 scripts/fetch_fonts.py
+      - run: flutter pub get
+        working-directory: flutter_app
+      - working-directory: flutter_app
+        run: flutter build web --release --no-web-resources-cdn --dart-define=FIREBASE_API_KEY=test --dart-define=FIREBASE_PROJECT_ID=demo --dart-define=FIREBASE_HOST=http://localhost:8787
+      - run: cd flutter_app/build/web && zip -qr ../../../webtest.zip .
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: webtest-${{ github.run_number }}
+          name: webtest ${{ github.run_number }}
+          prerelease: true
+          files: webtest.zip
