@@ -5,7 +5,9 @@ on:
   workflow_dispatch:
 
 env:
-  DEFINES: --dart-define=FIREBASE_API_KEY=${{ vars.FIREBASE_API_KEY }} --dart-define=FIREBASE_PROJECT_ID=${{ vars.FIREBASE_PROJECT_ID }}
+  # Firebase web config identifiers (public by design; access is enforced by firestore.rules).
+  # Repository variables of the same name override these.
+  DEFINES: --dart-define=FIREBASE_API_KEY=${{ vars.FIREBASE_API_KEY || 'AIzaSyA-aH7j45taDyVWPUDJ8YET17_2t6tTKI0' }} --dart-define=FIREBASE_PROJECT_ID=${{ vars.FIREBASE_PROJECT_ID || 'aden-portal-flutter-arm64' }}
 
 jobs:
   android:
