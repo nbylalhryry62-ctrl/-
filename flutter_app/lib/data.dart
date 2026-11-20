@@ -1,6 +1,6 @@
 import 'dart:convert';
-import 'dart:io';
 import 'dart:math';
+import 'package:archive/archive.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -76,7 +76,8 @@ class Bank {
 
   static Future<Bank> load() async {
     final data = await rootBundle.load('assets/qbank.json.gz');
-    final bytes = gzip.decode(data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes));
+    // Pure-Dart gunzip so the same code runs on Android, iOS and the web.
+    final bytes = GZipDecoder().decodeBytes(data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes));
     final list = jsonDecode(utf8.decode(bytes)) as List;
     return Bank._(list.map((e) => Question.fromJson(e as Map<String, dynamic>)).toList(growable: false));
   }

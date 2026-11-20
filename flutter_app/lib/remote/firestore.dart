@@ -8,6 +8,8 @@ import 'package:http/http.dart' as http;
 class FirebaseConfig {
   static const apiKey = String.fromEnvironment('FIREBASE_API_KEY');
   static const projectId = String.fromEnvironment('FIREBASE_PROJECT_ID');
+  /// Overridable only for tests against a local fake server.
+  static const host = String.fromEnvironment('FIREBASE_HOST', defaultValue: 'https://firestore.googleapis.com');
   static bool get enabled => apiKey.isNotEmpty && projectId.isNotEmpty;
 }
 
@@ -67,7 +69,7 @@ typedef TokenProvider = Future<String?> Function();
 
 /// Minimal Firestore REST client (no Firebase SDK, so it builds anywhere).
 class Firestore {
-  Firestore(this.client, {this.apiKey = FirebaseConfig.apiKey, this.projectId = FirebaseConfig.projectId, this.token, this.host = 'https://firestore.googleapis.com'});
+  Firestore(this.client, {this.apiKey = FirebaseConfig.apiKey, this.projectId = FirebaseConfig.projectId, this.token, this.host = FirebaseConfig.host});
   final http.Client client;
   final String apiKey, projectId, host;
   final TokenProvider? token;

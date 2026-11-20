@@ -1,17 +1,22 @@
 name: Flutter app
 on:
   push:
-    paths: ["flutter_app/**", ".github/workflows/flutter.yml", "data/**"]
+    paths: ["flutter_app/**", ".github/workflows/flutter.yml", "data/**", "scripts/apply_flutter_icons.py", "pwa-deploy/icons/**", "android-build/icons/**"]
   workflow_dispatch:
+
+env:
+  DEFINES: --dart-define=FIREBASE_API_KEY=${{ vars.FIREBASE_API_KEY }} --dart-define=FIREBASE_PROJECT_ID=${{ vars.FIREBASE_PROJECT_ID }}
+
 jobs:
-  build:
+  android:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
         with: { distribution: temurin, java-version: "17" }
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install pillow
       - uses: subosito/flutter-action@v2
         with: { channel: stable, cache: true }
       - name: Generate the Android platform folder
@@ -19,9 +24,9 @@ jobs:
         run: |
           flutter create . --platforms=android --org ye.edu.aden --project-name aden_portal
           rm -f test/widget_test.dart
+          python3 ../scripts/apply_flutter_icons.py
           # Kotlin 2.3.x artifacts are not always resolvable from the plugin portal; pin a published one
           sed -i 's/org.jetbrains.kotlin.android" version "[0-9.]*"/org.jetbrains.kotlin.android" version "2.2.20"/' android/settings.gradle.kts
-          grep -n kotlin android/settings.gradle.kts
           # The generated main manifest has no INTERNET permission (only debug/profile do); release builds need it.
           sed -i '0,/<application/s//<uses-permission android:name="android.permission.INTERNET"\/>\n    <application/' android/app/src/main/AndroidManifest.xml
           grep -n "INTERNET" android/app/src/main/AndroidManifest.xml
@@ -35,8 +40,6 @@ jobs:
         run: flutter test
       - name: Build release APKs (universal + per-ABI, smaller)
         working-directory: flutter_app
-        env:
-          DEFINES: --dart-define=FIREBASE_API_KEY=${{ vars.FIREBASE_API_KEY }} --dart-define=FIREBASE_PROJECT_ID=${{ vars.FIREBASE_PROJECT_ID }}
         run: |
           flutter build apk --release $DEFINES
           cp build/app/outputs/flutter-apk/app-release.apk ../aden-portal-flutter.apk
@@ -46,13 +49,90 @@ jobs:
           mv aden-portal-flutter.apk out/aden-portal-flutter.apk
           cp flutter_app/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk out/aden-portal-flutter-arm64.apk
           cp flutter_app/build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk out/aden-portal-flutter-arm32.apk
+      - uses: actions/upload-artifact@v4
+        with: { name: aden-apk, path: out/, if-no-files-found: error }
+
+  web:
+    # Installable on iPhone/iPad (Safari > Share > Add to Home Screen) and on Android/desktop browsers.
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install pillow
+      - uses: subosito/flutter-action@v2
+        with: { channel: stable, cache: true }
+      - name: Generate the web platform folder
+        working-directory: flutter_app
+        run: |
+          flutter create . --platforms=web --org ye.edu.aden --project-name aden_portal
+          rm -f test/widget_test.dart
+          python3 ../scripts/apply_flutter_icons.py
+      - run: flutter pub get
+        working-directory: flutter_app
+      - name: Build web (CanvasKit bundled, works offline once installed)
+        working-directory: flutter_app
+        run: flutter build web --release --base-href /-/ --no-web-resources-cdn $DEFINES
+      - run: |
+          mkdir -p out
+          (cd flutter_app/build/web && zip -qr ../../../out/aden-portal-web.zip .)
+      - uses: actions/upload-artifact@v4
+        with: { name: aden-web, path: out/, if-no-files-found: error }
+      - name: Publish to the gh-pages branch
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: flutter_app/build/web
+          force_orphan: true
+          commit_message: "Deploy web build ${{ github.sha }}"
+
+  ios:
+    # Unsigned IPA: needs re-signing (AltStore/Sideloadly with a free Apple ID, or an Apple Developer account).
+    runs-on: macos-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install pillow
+      - uses: subosito/flutter-action@v2
+        with: { channel: stable, cache: true }
+      - name: Generate the iOS platform folder
+        working-directory: flutter_app
+        run: |
+          flutter create . --platforms=ios --org ye.edu.aden --project-name aden_portal
+          rm -f test/widget_test.dart
+          python3 ../scripts/apply_flutter_icons.py
+      - run: flutter pub get
+        working-directory: flutter_app
+      - name: Build (no code signing)
+        working-directory: flutter_app
+        run: flutter build ios --release --no-codesign $DEFINES
+      - name: Package IPA
+        run: |
+          mkdir -p out Payload
+          cp -R flutter_app/build/ios/iphoneos/Runner.app Payload/
+          zip -qr out/aden-portal-ios-unsigned.ipa Payload
           ls -la out
       - uses: actions/upload-artifact@v4
-        with: { name: aden-portal-flutter-apk, path: out/, if-no-files-found: error }
+        with: { name: aden-ios, path: out/, if-no-files-found: error }
+
+  release:
+    needs: [android, web, ios]
+    if: ${{ always() && needs.android.result == 'success' && needs.web.result == 'success' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with: { pattern: "aden-*", path: out, merge-multiple: true }
+      - run: ls -la out
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: aden-portal-flutter-${{ github.run_number }}
-          name: بوابة القبول - Flutter APK (${{ github.run_number }})
-          body: "نسخة Flutter (Release). الأصغر للهواتف الحديثة هي aden-portal-flutter-arm64.apk"
-          files: out/*.apk
+          name: بوابة القبول - Flutter (${{ github.run_number }})
+          body: "أندرويد: aden-portal-flutter-arm64.apk للهواتف الحديثة. آيفون: النسخة الويب (إضافة إلى الشاشة الرئيسية) أو ملف IPA غير موقّع. انظر INSTALL.md"
+          files: out/*
           target_commitish: ${{ github.sha }}
