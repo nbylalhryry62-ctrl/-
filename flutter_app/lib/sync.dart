@@ -102,7 +102,7 @@ class ContentSync extends ChangeNotifier {
 
   /// Returns true when new content or settings arrived.
   Future<bool> refresh() async {
-    if (!SupabaseConfig.enabled) return false;
+    if (db.url.isEmpty || db.anonKey.isEmpty) return false;
     try {
       final rows = await db.select('app_config', query: {'id': 'eq.main'});
       if (rows.isEmpty) return false;
