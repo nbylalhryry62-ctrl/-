@@ -7,7 +7,7 @@ import 'screens/exam.dart';
 import 'screens/home.dart';
 import 'screens/review.dart';
 import 'store.dart';
-import 'remote/firestore.dart';
+import 'remote/supabase.dart';
 import 'access.dart';
 import 'screens/admin.dart';
 import 'screens/gate.dart';
@@ -21,9 +21,9 @@ Future<void> main() async {
   final prefs = await SharedPreferences.getInstance();
   final bank = await Bank.load();
   final store = AppStore(bank, prefs);
-  final services = Services.create(store, (fs) => ContentSync(fs, prefs, bank)..loadLocal());
+  final services = Services.create(store, (db) => ContentSync(db, prefs, bank)..loadLocal());
   runApp(AdenApp(services: services));
-  if (FirebaseConfig.enabled) {
+  if (SupabaseConfig.enabled) {
     await services.access.init();
     await services.sync.refresh();
   }
@@ -72,7 +72,7 @@ class Root extends StatelessWidget {
       listenable: Listenable.merge([s.access, s.sync]),
       builder: (context, _) {
         void admin() => openAdmin(context, s);
-        if (!FirebaseConfig.enabled) return Shell(services: s);   // no Firebase configured: open app
+        if (!SupabaseConfig.enabled) return Shell(services: s);   // no backend configured: open app
         switch (s.access.status) {
           case AccessStatus.loading:
             return const Scaffold(body: Center(child: CircularProgressIndicator()));

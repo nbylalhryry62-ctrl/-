@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'dart:math';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'remote/firestore.dart';
+import 'remote/supabase.dart';
 
 abstract class SecureKv {
   Future<String?> read(String k);
@@ -31,18 +31,9 @@ class MemoryKv implements SecureKv {
   Future<void> delete(String k) async => m.remove(k);
 }
 
-enum Verdict { ok, activate, invalid, otherDevice }
-
 const msgInvalid = 'الرمز غير صحيح أو موقوف';
 const msgOtherDevice = 'هذا الرمز مستخدم مسبقاً على جهاز آخر';
 const msgUnbound = 'تم فك ارتباط هذا الجهاز بالرمز. أدخل الرمز من جديد';
-
-/// The one rule that decides access, kept pure so it can be tested.
-Verdict judge(Map<String, dynamic>? doc, String deviceId) {
-  if (doc == null || doc['isActive'] != true) return Verdict.invalid;
-  if (doc['isUsed'] != true) return Verdict.activate;
-  return doc['deviceId'] == deviceId ? Verdict.ok : Verdict.otherDevice;
-}
 
 const _alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // 32 symbols, no 0/O/1/I
 
@@ -85,8 +76,8 @@ class VerifyResult {
 }
 
 class AccessService {
-  AccessService(this.fs, this.kv, {DateTime Function()? now, this.offlineGrace = const Duration(days: 30)}) : _now = now ?? DateTime.now;
-  final Firestore fs;
+  AccessService(this.db, this.kv, {DateTime Function()? now, this.offlineGrace = const Duration(days: 30)}) : _now = now ?? DateTime.now;
+  final Backend db;
   final SecureKv kv;
   final DateTime Function() _now;
   final Duration offlineGrace;
@@ -141,32 +132,21 @@ class AccessService {
     if (!validCodeFormat(code)) throw await _fail(msgInvalid);
     final dev = await deviceId();
     try {
-      var doc = await fs.get('access_codes/$code');
-      for (var attempt = 0; attempt < 3; attempt++) {
-        switch (judge(doc?.data, dev)) {
-          case Verdict.invalid:
-            throw await _fail(msgInvalid);
-          case Verdict.otherDevice:
-            throw await _fail(msgOtherDevice);
-          case Verdict.ok:
-            await _saveLocal(code);
-            await kv.delete(_kFails);
-            return;
-          case Verdict.activate:
-            try {
-              // The update time is a precondition: if two phones race, only one write wins.
-              await fs.patch('access_codes/$code', {'isUsed': true, 'deviceId': dev, 'activatedAt': _now().toUtc()}, ifUpdateTime: doc!.updateTime);
-              await _saveLocal(code);
-              await kv.delete(_kFails);
-              return;
-            } on FsException catch (e) {
-              if (!e.isConflict) rethrow;
-              doc = await fs.get('access_codes/$code');
-            }
-        }
+      // The database decides atomically (row lock), so two phones can never both win.
+      final r = await db.rpc('activate_code', {'p_code': code, 'p_device': dev});
+      switch (r) {
+        case 'ok':
+          await _saveLocal(code);
+          await kv.delete(_kFails);
+          return;
+        case 'other_device':
+          throw await _fail(msgOtherDevice);
+        case 'locked':
+          throw ActivationException('محاولات كثيرة من هذا الجهاز. حاول بعد قليل');
+        default:
+          throw await _fail(msgInvalid);
       }
-      throw await _fail(msgOtherDevice);
-    } on FsException catch (e) {
+    } on RemoteException catch (e) {
       if (e.isNetwork) throw ActivationException('تعذر الاتصال بالإنترنت. التفعيل لأول مرة يحتاج اتصالًا');
       if (e.isDenied) throw ActivationException('تعذر التحقق من الرمز (صلاحيات الخادم). راجع المشرف');
       throw ActivationException('حدث خطأ غير متوقع، حاول مرة أخرى');
@@ -180,22 +160,21 @@ class AccessService {
     final code = st['code'] as String;
     final dev = await deviceId();
     try {
-      final doc = await fs.get('access_codes/$code');
-      switch (judge(doc?.data, dev)) {
-        case Verdict.ok:
+      switch (await db.rpc('verify_code', {'p_code': code, 'p_device': dev})) {
+        case 'ok':
           await _saveLocal(code);
           return const VerifyResult(VerifyKind.ok);
-        case Verdict.activate:
+        case 'unbound':
           await kv.delete(_kState);
           return const VerifyResult(VerifyKind.revoked, msgUnbound);
-        case Verdict.otherDevice:
+        case 'other_device':
           await kv.delete(_kState);
           return const VerifyResult(VerifyKind.revoked, msgOtherDevice);
-        case Verdict.invalid:
+        default:
           await kv.delete(_kState);
           return const VerifyResult(VerifyKind.revoked, 'تم إيقاف هذا الرمز من قبل المشرف');
       }
-    } on FsException {
+    } on RemoteException {
       // Offline or server trouble: keep working, but not forever without a successful check.
       final last = DateTime.fromMillisecondsSinceEpoch((st['verifiedAt'] as int?) ?? 0);
       if (_now().difference(last) > offlineGrace) {

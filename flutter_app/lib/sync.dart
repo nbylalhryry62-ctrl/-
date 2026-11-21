@@ -2,9 +2,9 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'data.dart';
-import 'remote/firestore.dart';
+import 'remote/supabase.dart';
 
-/// Remote settings document: app_config/main
+/// Remote settings row: app_config where id = 'main'
 class RemoteConfig {
   const RemoteConfig({
     this.contentVersion = 0, this.maintenanceMode = false, this.maintenanceMessage = '', this.announcement = '',
@@ -25,6 +25,23 @@ class RemoteConfig {
         hiddenColleges: ((m['hiddenColleges'] as List?) ?? const []).cast<String>(),
       );
 
+  /// A row of the `app_config` table (snake_case columns).
+  factory RemoteConfig.fromRow(Map<String, dynamic> r) => RemoteConfig(
+        contentVersion: (r['content_version'] as num?)?.toInt() ?? 0,
+        maintenanceMode: r['maintenance_mode'] == true,
+        maintenanceMessage: (r['maintenance_message'] as String?) ?? '',
+        announcement: (r['announcement'] as String?) ?? '',
+        contactUrl: (r['contact_url'] as String?) ?? '',
+        defaultExamMinutes: ((r['default_exam_minutes'] as num?)?.toInt() ?? 20).clamp(5, 180),
+        hiddenColleges: ((r['hidden_colleges'] as List?) ?? const []).cast<String>(),
+      );
+
+  /// The settings the admin may change, as accepted by the `save_config` function.
+  Map<String, dynamic> toRow() => {
+        'maintenance_mode': maintenanceMode, 'maintenance_message': maintenanceMessage, 'announcement': announcement,
+        'contact_url': contactUrl, 'default_exam_minutes': defaultExamMinutes, 'hidden_colleges': hiddenColleges,
+      };
+
   Map<String, dynamic> toMap() => {
         'contentVersion': contentVersion, 'maintenanceMode': maintenanceMode, 'maintenanceMessage': maintenanceMessage,
         'announcement': announcement, 'contactUrl': contactUrl, 'defaultExamMinutes': defaultExamMinutes, 'hiddenColleges': hiddenColleges,
@@ -42,12 +59,12 @@ class RemoteConfig {
       );
 }
 
-/// Keeps settings and question edits in step with Firestore without reinstalling the app.
+/// Keeps settings and question edits in step with Supabase without reinstalling the app.
 /// Only the settings document and the patches newer than the local contentVersion are downloaded;
 /// everything is cached so the app also works offline.
 class ContentSync extends ChangeNotifier {
-  ContentSync(this.fs, this.prefs, this.bank);
-  final Firestore fs;
+  ContentSync(this.db, this.prefs, this.bank);
+  final Backend db;
   final SharedPreferences prefs;
   final Bank bank;
 
@@ -85,16 +102,16 @@ class ContentSync extends ChangeNotifier {
 
   /// Returns true when new content or settings arrived.
   Future<bool> refresh() async {
-    if (!FirebaseConfig.enabled) return false;
+    if (!SupabaseConfig.enabled) return false;
     try {
-      final d = await fs.get('app_config/main');
-      if (d == null) return false;
-      final remote = RemoteConfig.fromMap(d.data);
+      final rows = await db.select('app_config', query: {'id': 'eq.main'});
+      if (rows.isEmpty) return false;
+      final remote = RemoteConfig.fromRow(rows.first);
       var changed = remote.toMap().toString() != config.toMap().toString();
       if (remote.contentVersion > _localVersion) {
-        final docs = await fs.queryGreater('question_patches', 'v', _localVersion);
-        for (final p in docs) {
-          _patches[p.id] = {...p.data};
+        final patches = await db.selectAll('question_patches', query: {'v': 'gt.$_localVersion'});
+        for (final p in patches) {
+          _patches[p['id'] as String] = {...((p['data'] as Map?)?.cast<String, dynamic>() ?? const {}), 'deleted': p['deleted'] == true};
         }
         _localVersion = remote.contentVersion;
         changed = true;
@@ -106,7 +123,7 @@ class ContentSync extends ChangeNotifier {
         notifyListeners();
       }
       return changed;
-    } on FsException {
+    } on RemoteException {
       return false; // offline: keep what we have
     }
   }

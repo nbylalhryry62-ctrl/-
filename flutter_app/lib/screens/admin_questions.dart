@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../data.dart';
-import '../remote/firestore.dart';
+import '../remote/supabase.dart';
 import '../services.dart';
 
 class QuestionsTab extends StatefulWidget {
@@ -44,7 +44,7 @@ class _QuestionsTabState extends State<QuestionsTab> with AutomaticKeepAliveClie
         setState(() {});
         _toast('تم الحذف');
       }
-    } on FsException {
+    } on RemoteException {
       _toast('تعذر الحذف');
     }
   }
@@ -111,7 +111,7 @@ class _QuestionEditorState extends State<QuestionEditor> {
     try {
       await widget.s.admin.publishQuestion(q);
       if (mounted) Navigator.pop(context, true);
-    } on FsException {
+    } on RemoteException {
       if (mounted) {
         setState(() => _saving = false);
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تعذر الحفظ')));

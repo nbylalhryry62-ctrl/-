@@ -33,3 +33,26 @@ jobs:
           python3 -m http.server 8766 --directory pwa-deploy &
           sleep 2
           node tests/e2e.mjs
+  supabase-sql:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env: { POSTGRES_PASSWORD: postgres }
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      PGHOST: localhost
+      PGUSER: postgres
+      PGPASSWORD: postgres
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply the migration on a clean database
+        run: |
+          psql -v ON_ERROR_STOP=1 -f supabase/tests/prelude.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migration.sql
+      - name: The migration can be re-run safely
+        run: psql -v ON_ERROR_STOP=1 -f supabase/migration.sql
+      - name: Security and activation tests
+        run: psql -v ON_ERROR_STOP=1 -f supabase/tests/run.sql

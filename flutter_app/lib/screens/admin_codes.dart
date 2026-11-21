@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../access.dart';
 import '../remote/admin_api.dart';
-import '../remote/firestore.dart';
+import '../remote/supabase.dart';
 
 class CodesTab extends StatefulWidget {
   const CodesTab(this.api, {super.key});
@@ -33,7 +33,7 @@ class _CodesTabState extends State<CodesTab> with AutomaticKeepAliveClientMixin 
   Future<void> _load() async {
     try {
       _all = await widget.api.codes();
-    } on FsException {
+    } on RemoteException {
       if (mounted) _toast('تعذر تحميل الرموز');
     }
     if (mounted) setState(() => _loading = false);
@@ -54,7 +54,7 @@ class _CodesTabState extends State<CodesTab> with AutomaticKeepAliveClientMixin 
         try {
           await widget.api.createCode(code, _name.text.trim());
           made.add(code);
-        } on FsException catch (e) {
+        } on RemoteException catch (e) {
           if (e.isConflict || e.status == 409) {
             if (_custom.text.trim().isNotEmpty) {
               _toast('هذا الرمز موجود مسبقًا');
@@ -66,7 +66,7 @@ class _CodesTabState extends State<CodesTab> with AutomaticKeepAliveClientMixin 
           }
         }
       }
-    } on FsException {
+    } on RemoteException {
       _toast('تعذر إنشاء الرمز');
     }
     _fresh = made;
@@ -98,7 +98,7 @@ class _CodesTabState extends State<CodesTab> with AutomaticKeepAliveClientMixin 
       await f();
       _toast(ok);
       await _load();
-    } on FsException {
+    } on RemoteException {
       _toast('تعذر تنفيذ العملية');
     }
   }

@@ -1,16 +1,16 @@
 import 'package:flutter/material.dart';
 import '../data.dart';
 import '../remote/auth.dart';
-import '../remote/firestore.dart';
+import '../remote/supabase.dart';
 import '../services.dart';
 import '../sync.dart';
 import 'admin_codes.dart';
 import 'admin_questions.dart';
 
-/// Opens the admin dashboard, asking for the Firebase admin login first when needed.
+/// Opens the admin dashboard, asking for the admin login first when needed.
 Future<void> openAdmin(BuildContext context, Services s) async {
-  if (!FirebaseConfig.enabled) {
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('لم تُضبط إعدادات Firebase في هذه النسخة')));
+  if (!SupabaseConfig.enabled) {
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('لم تُضبط إعدادات Supabase في هذه النسخة')));
     return;
   }
   if (!s.auth.signedIn) {
@@ -39,12 +39,16 @@ class _LoginDialogState extends State<_LoginDialog> {
     });
     try {
       await widget.s.auth.signIn(_mail.text, _pw.text);
-      // The account must be a listed admin: the rules only let admins read the codes list.
-      await widget.s.admin.codes();
+      // The account must be listed in the `admins` table; the database answers, not the app.
+      if (!await widget.s.admin.isAdmin()) {
+        widget.s.auth.signOut();
+        _fail('هذا الحساب ليس حساب مشرف');
+        return;
+      }
       if (mounted) Navigator.pop(context, true);
     } on AuthException catch (e) {
       _fail(e.message);
-    } on FsException catch (e) {
+    } on RemoteException catch (e) {
       widget.s.auth.signOut();
       _fail(e.isDenied ? 'هذا الحساب ليس حساب مشرف' : 'تعذر الاتصال بالخادم');
     } finally {
@@ -134,7 +138,7 @@ class _SettingsTabState extends State<SettingsTab> with AutomaticKeepAliveClient
       _maint = c.maintenanceMode;
       _hidden = c.hiddenColleges.toSet();
       _err = null;
-    } on FsException {
+    } on RemoteException {
       _err = 'تعذر تحميل الإعدادات';
     }
     if (mounted) setState(() => _loading = false);
@@ -150,7 +154,7 @@ class _SettingsTabState extends State<SettingsTab> with AutomaticKeepAliveClient
       ));
       await widget.s.sync.refresh();
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('تم الحفظ، إصدار المحتوى $v')));
-    } on FsException {
+    } on RemoteException {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تعذر الحفظ')));
     }
     if (mounted) setState(() => _saving = false);

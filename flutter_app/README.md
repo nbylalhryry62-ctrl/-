@@ -10,10 +10,10 @@ flutter build apk --release
 ```
 مجلدات المنصات (android/ios) تُولَّد بالأمر `flutter create` ولا تُحفظ في المستودع.
 
-## التفعيل والإدارة عن بُعد (Firebase)
-بدون إعداد Firebase يعمل التطبيق مفتوحًا. لتفعيل بوابة الرموز ولوحة المشرف والمزامنة:
-اتبع `../FIREBASE_SETUP.md` ثم شغّل بالمتغيرين:
+## التفعيل والإدارة عن بُعد (Supabase)
+بدون إعداد Supabase يعمل التطبيق مفتوحًا. لتفعيل بوابة الرموز ولوحة المشرف والمزامنة:
+اتبع `../SUPABASE_SETUP.md` ثم شغّل بالمتغيرين:
 ```bash
-flutter run --dart-define=FIREBASE_API_KEY=... --dart-define=FIREBASE_PROJECT_ID=...
+flutter run --dart-define=SUPABASE_URL=https://xxxx.supabase.co --dart-define=SUPABASE_ANON_KEY=...
 ```
 دخول المشرف: ضغط مطوّل على الشعار (في شاشة التفعيل أو شريط التطبيق).

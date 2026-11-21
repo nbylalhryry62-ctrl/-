@@ -5,9 +5,9 @@ on:
   workflow_dispatch:
 
 env:
-  # Firebase web config identifiers (public by design; access is enforced by firestore.rules).
-  # Repository variables of the same name override these.
-  DEFINES: --dart-define=FIREBASE_API_KEY=${{ vars.FIREBASE_API_KEY || 'AIzaSyA-aH7j45taDyVWPUDJ8YET17_2t6tTKI0' }} --dart-define=FIREBASE_PROJECT_ID=${{ vars.FIREBASE_PROJECT_ID || 'aden-portal-flutter-arm64' }}
+  # Supabase project settings (public by design; access is enforced inside the database, see supabase/migration.sql).
+  # Set them once under Settings > Secrets and variables > Actions > Variables. Empty = the app runs open, without the gate.
+  DEFINES: --dart-define=SUPABASE_URL=${{ vars.SUPABASE_URL }} --dart-define=SUPABASE_ANON_KEY=${{ vars.SUPABASE_ANON_KEY }}
 
 jobs:
   android:
